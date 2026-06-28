@@ -12,23 +12,30 @@ http.createServer((req, res) => {
    console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
 
-// 3. Import required modules from discord.js, captcha-canvas, axios, and fs
+// 3. Import required modules from discord.js
 const { 
     Client, 
     ChannelType,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    AttachmentBuilder
+    AttachmentBuilder,
+    GatewayIntentBits,
+    PermissionFlagsBits
 } = require('discord.js');
 const { Captcha } = require('captcha-canvas');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Enable full client intents including guild member presence status
+// Enable full client intents explicitly using GatewayIntentBits to prevent crashes
 const client = new Client({
-    intents: [1, 2, 512, 256] // Guilds, GuildMembers, GuildMessages, GuildPresences
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildPresences
+    ]
 });
 
 // 🛡️ SECURITY CONFIGURATION (Replace with your actual Discord Server Role IDs)
@@ -196,20 +203,16 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
                 await member.roles.add(unverifiedRole).catch(() => null);
             }
 
-            // Generate secure anti-bot image using captcha-canvas
             const captcha = new Captcha();
             captcha.async = true;
             captcha.addDecoy(); 
             captcha.drawTrace(); 
             captcha.drawCaptcha();
 
-            // Save text in cache map (User ID -> Solution)
             userCaptchas.set(member.id, captcha.text);
 
-            // Convert buffer to file attachment
             const attachment = new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
 
-            // Send notification inside the verification channel
             await targetChannel.send({
                 content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
                 files: [attachment]
@@ -226,7 +229,7 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
 
 // 📥 EVENT: Anti-Raid Burst Detection on User Join
 client.on('guildMemberAdd', async (member) => {
-    if (member.user.bot) return; // Skip authorized application bots
+    if (member.user.bot) return; 
 
     const now = Date.now();
     joinLog.push(now);
@@ -244,27 +247,25 @@ client.on('guildMemberAdd', async (member) => {
     await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENT: Interactions Process (Commands & Interfaces 100% English)
+// 🚀 EVENT: Interaction Processing (Completely Protected from "Application Did Not Respond")
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand?.() && !interaction.isCommand?.()) return;
+    if (!interaction.isChatInputCommand()) return;
 
-    // 1. THE MAIN /verify SLASH COMMAND HANDLER
-    if (interaction.commandName === 'verify') {
-        const codIntrodus = interaction.options.getString('code');
-        const userId = interaction.user.id;
+    try {
+        // 1. THE MAIN /verify SLASH COMMAND HANDLER
+        if (interaction.commandName === 'verify') {
+            const codIntrodus = interaction.options.getString('code');
+            const userId = interaction.user.id;
 
-        // Check if user has a pending CAPTCHA challenge
-        if (!userCaptchas.has(userId)) {
-            return interaction.reply({ content: '❌ You do not have an active security challenge to solve on this server.', ephemeral: true });
-        }
+            if (!userCaptchas.has(userId)) {
+                return interaction.reply({ content: '❌ You do not have an active security challenge to solve on this server.', ephemeral: true });
+            }
 
-        const codCorect = userCaptchas.get(userId);
+            const codCorect = userCaptchas.get(userId);
 
-        // Case-Insensitive evaluation
-        if (codIntrodus.toUpperCase() === codCorect.toUpperCase()) {
-            userCaptchas.delete(userId); // Clear memory cache
+            if (codIntrodus.toUpperCase() === codCorect.toUpperCase()) {
+                userCaptchas.delete(userId); 
 
-            try {
                 const unverifiedRole = interaction.guild.roles.cache.get(ROL_UNVERIFIED_ID);
                 const verifiedRole = interaction.guild.roles.cache.get(ROL_VERIFIED_ID);
 
@@ -272,41 +273,46 @@ client.on('interactionCreate', async (interaction) => {
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
 
                 return interaction.reply({ content: '✅ Verification successful! Your account has been authenticated. Welcome to the server!', ephemeral: true });
-            } catch (err) {
-                return interaction.reply({ content: '❌ Hierarchy Error: The bot cannot manage your server roles. Please notify an Administrator.', ephemeral: true });
+            } else {
+                return interaction.reply({ content: '❌ Invalid code! Please read the image carefully and try the \`/verify\` command again.', ephemeral: true });
             }
-        } else {
-            return interaction.reply({ content: '❌ Invalid code! Please read the image carefully and try the \`/verify\` command again.', ephemeral: true });
         }
-    }
 
-    // CHECK PERMISSIONS FOR ADMINISTRATIVE SYSTEMS
-    if (!interaction.member.permissions.has('ADMINISTRATOR')) {
-        return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
-    }
-
-    // 2. THE /scan ROUTINE
-    if (interaction.commandName === 'scan') {
-        await interaction.deferReply();
-        loadLocalTextBlacklists();
-        const members = await interaction.guild.members.fetch();
-        let safeCount = 0, bannedCount = 0;
-
-        await interaction.editReply(`🔄 Executing mass security scan across ${members.size} active members...`);
-
-        for (const [id, member] of members) {
-            if (member.user.bot) continue;
-            const result = await performIndependentSecurityCheck(member, null, true); 
-            if (result.status === 'safe') safeCount++;
-            else if (result.status === 'banned') bannedCount++;
+        // CHECK PERMISSIONS USING V14 SYNTAX (PermissionFlagsBits)
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
         }
-        await interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Malicious Accounts Purged (Blacklist/Roblox): ${bannedCount}`);
-    }
 
-    // 3. THE /lockdown ROUTINE
-    if (interaction.commandName === 'lockdown') {
-        LOCKDOWN_MODE = !LOCKDOWN_MODE;
-        return interaction.reply(`🚨 **Emergency LOCKDOWN Status** has been changed to: **${LOCKDOWN_MODE ? 'ENABLED (New joins will be instantly kicked)' : 'DISABLED (Server returned to normal behavior)'}**.`);
+        // 2. THE /scan ROUTINE
+        if (interaction.commandName === 'scan') {
+            await interaction.deferReply();
+            loadLocalTextBlacklists();
+            const members = await interaction.guild.members.fetch();
+            let safeCount = 0, bannedCount = 0;
+
+            for (const [id, member] of members) {
+                if (member.user.bot) continue;
+                const result = await performIndependentSecurityCheck(member, null, true); 
+                if (result.status === 'safe') safeCount++;
+                else if (result.status === 'banned') bannedCount++;
+            }
+            return interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Malicious Accounts Purged (Blacklist/Roblox): ${bannedCount}`);
+        }
+
+        // 3. THE /lockdown ROUTINE
+        if (interaction.commandName === 'lockdown') {
+            LOCKDOWN_MODE = !LOCKDOWN_MODE;
+            return interaction.reply(`🚨 **Emergency LOCKDOWN Status** has been changed to: **${LOCKDOWN_MODE ? 'ENABLED (New joins will be instantly kicked)' : 'DISABLED (Server returned to normal behavior)'}**.`);
+        }
+
+    } catch (error) {
+        console.error('🔴 Critical Interaction Error Caught:', error);
+        // Safely respond to Discord to completely avoid "The application did not respond"
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: '❌ An internal processing error occurred while executing this command.', ephemeral: true }).catch(() => null);
+        } else if (interaction.deferred) {
+            await interaction.editReply({ content: '❌ An internal processing error occurred while executing this command.' }).catch(() => null);
+        }
     }
 });
 
