@@ -65,7 +65,7 @@ function getRobloxUsername(member) {
 }
 
 // Funcția principală care verifică grupurile de Roblox direct prin API-ul oficial Roblox
-async function checkRobloxUserIndependent(robloxUsername, member, interactionOrChannel = null) {
+async function checkRobloxUserIndependent(robloxUsername, member, targetChannel = null, isBulkScan = false) {
     try {
         const userResponse = await axios.post('https://users.roblox.com/v1/usernames/users', {
             usernames: [robloxUsername],
@@ -96,17 +96,15 @@ async function checkRobloxUserIndependent(robloxUsername, member, interactionOrC
         }
 
         if (isInCondo) {
+            // Trimite mesajul privat exact așa cum ai cerut
             await member.send(`⚠️ ${member.user.username} you have been banned from the group ${flaggedGroupName}`).catch(() => null);
-            await member.ban({ reason: `Independent Security: Membru in grupul Condo ID listat (${flaggedGroupName})` }).catch(() => null);
+            // Execută ban-ul pe Discord
+            await member.ban({ reason: `Independent Security: Membru in grupul Condo listat (${flaggedGroupName})` }).catch(() => null);
             return { status: 'banned', groupName: flaggedGroupName };
         } else {
-            if (interactionOrChannel) {
-                // Verificăm dacă trimitem pe canal sau ca răspuns la interacțiune (compatibil v13/v14)
-                if (interactionOrChannel.editReply || interactionOrChannel.followUp) {
-                    await interactionOrChannel.followUp({ content: `✅ ${member.user.username} your account is safe`, ephemeral: true }).catch(() => null);
-                } else {
-                    await interactionOrChannel.send(`✅ ${member.user.username} your account is safe`).catch(() => null);
-                }
+            // Trimitem mesaj normal pe chat DOAR dacă e intrare de membru nou (la scanarea generală nu facem spam)
+            if (targetChannel && !isBulkScan) {
+                await targetChannel.send(`✅ ${member.user.username} your account is safe`).catch(() => null);
             }
             return { status: 'safe' };
         }
@@ -127,33 +125,37 @@ client.on('guildMemberAdd', async (member) => {
         );
     }
 
-    await checkRobloxUserIndependent(robloxName, member, targetChannel);
+    await checkRobloxUserIndependent(robloxName, member, targetChannel, false);
 });
 
-// 🚀 EVENIMENT: Executarea comenzii globale /scan (FIX COMPATIBILITATE v13/v14)
+// 🚀 EVENIMENT: Executarea comenzii globale /scan (Mesaje întregi, vizibile de toți)
 client.on('interactionCreate', async (interaction) => {
-    // Verificăm dacă interacțiunea este o comandă, indiferent de versiunea discord.js
     const isSlashCommand = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.isCommand && interaction.isCommand());
     if (!isSlashCommand) return;
 
     if (interaction.commandName === 'scan') {
-        await interaction.deferReply({ ephemeral: true });
+        // Am eliminat complet { ephemeral: true } ca să fie un mesaj normal, întreg pe chat
+        await interaction.deferReply(); 
 
         if (!interaction.member.permissions.has('ADMINISTRATOR') && !interaction.member.permissions.has('Administrator')) {
             return interaction.editReply('❌ Nu ai permisiunea de Administrator pentru a scana serverul.');
         }
 
+        // Luăm canalul de text unde s-a dat comanda
+        const channel = interaction.channel;
+
         const members = await interaction.guild.members.fetch();
         let safeCount = 0;
         let bannedCount = 0;
 
-        await interaction.editReply(`🔄 Se începe scanarea independență a celor ${members.size} membri...`);
+        await interaction.editReply(`🔄 Se începe scanarea serverului pentru toți cei ${members.size} membri...`);
 
         for (const [id, member] of members) {
             if (member.user.bot) continue;
 
             const robloxName = getRobloxUsername(member);
-            const result = await checkRobloxUserIndependent(robloxName, member, interaction);
+            // Activam flag-ul true ca sa stie ca e scanare generala si sa nu umple chatul cu "your account is safe" pentru fiecare om
+            const result = await checkRobloxUserIndependent(robloxName, member, channel, true); 
 
             if (result.status === 'safe') {
                 safeCount++;
@@ -162,11 +164,8 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // Folosim followUp pentru a trimite raportul final separat
-        await interaction.followUp({ 
-            content: `📊 **Scanare completă!** Toți membrii au fost verificați direct pe Roblox.\n✅ Conturi sigure raportate: ${safeCount}\n🔨 Conturi periculoase eliminate: ${bannedCount}`, 
-            ephemeral: true 
-        }).catch(() => null);
+        // Trimitem raportul final ca mesaj întreg pe canal, vizibil pentru toți
+        await interaction.editReply(`📊 **Scanare completă!** Toți membrii au fost analizați.\n✅ Conturi sigure: ${safeCount}\n🔨 Conturi periculoase eliminate: ${bannedCount}`).catch(() => null);
     }
 });
 
