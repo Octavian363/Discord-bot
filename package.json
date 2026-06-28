@@ -1,15 +1,15 @@
 {
-  "name": "roblox-security-bot",
+  "name": "discord-bot",
   "version": "1.0.0",
-  "description": "Discord bot to scan for Roblox condo groups",
+  "description": "Global Security Shield Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "axios": "^1.18.1",
-    "captcha-canvas": "^3.4.0",
-    "discord.js": "^13.17.1",
-    "dotenv": "^17.4.2"
+    "axios": "^1.7.9",
+    "captcha-canvas": "^2.3.1",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
   }
 }

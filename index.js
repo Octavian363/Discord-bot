@@ -12,10 +12,11 @@ http.createServer((req, res) => {
    console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
 
-// 3. Import required modules from discord.js
+// 3. Import required modules from discord.js v14
 const { 
     Client, 
-    ChannelType,
+    GatewayIntentBits,
+    PermissionFlagsBits,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
@@ -26,10 +27,14 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// 4. Use raw intent integers to ensure 100% compatibility and prevent undefined crashes
-// 1 = Guilds, 2 = GuildMembers, 512 = GuildMessages, 256 = GuildPresences
+// Enable full client intents using standard v14 layout
 const client = new Client({
-    intents: [1, 2, 512, 256]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildPresences
+    ]
 });
 
 // 🛡️ SECURITY CONFIGURATION (Replace with your actual Discord Server Role IDs)
@@ -116,7 +121,7 @@ client.once('ready', async () => {
                     {
                         name: 'code',
                         description: 'Enter the exact text found in the verification image',
-                        type: 3, // STRING
+                        type: 3, // STRING Option Type
                         required: true
                     }
                 ]
@@ -208,7 +213,7 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
             const attachment = new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
 
             await targetChannel.send({
-                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍ *Instructions:* Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
+                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
                 files: [attachment]
             }).catch(() => null);
         }
@@ -231,17 +236,17 @@ client.on('guildMemberAdd', async (member) => {
 
     if (joinLog.length > RAID_THRESHOLD && !LOCKDOWN_MODE) {
         LOCKDOWN_MODE = true;
-        let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === ChannelType.GuildText);
+        let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === 0); // 0 = GuildText
         if (targetChannel) {
             await targetChannel.send(`🚨 **Automated Anti-Raid System Activated!** A burst of malicious joins has been detected. Server entries are now under **LOCKDOWN** status.`).catch(() => null);
         }
     }
 
-    let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === ChannelType.GuildText);
+    let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === 0);
     await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENT: Interaction Processing (Completely Protected from crashes)
+// 🚀 EVENT: Interaction Processing (Completely Protected from "Application Did Not Respond")
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -272,8 +277,8 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // Check permission using raw bitwise 8n (ADMINISTRATOR flag) to keep it cross-version stable
-        if (!interaction.member.permissions.has(8n) && !interaction.member.permissions.has('ADMINISTRATOR')) {
+        // CHECK PERMISSIONS USING FORCED V14 SYNTAX
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
         }
 
