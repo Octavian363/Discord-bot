@@ -1,4 +1,18 @@
+// 1. Înrcărcăm variabilele de mediu (.env) primele pentru siguranță
 require('dotenv').config();
+
+// 2. Serverul web HTTP cerut de Render pentru a preveni eroarea de "Timeout"
+const http = require('http');
+const port = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+   res.writeHead(200, { 'Content-Type': 'text/plain' });
+   res.end('Botul de securitate este online si ruleaza 24/7!\n');
+}).listen(port, () => {
+   console.log(`[RENDER] Serverul de mentinere activa ruleaza pe portul ${port}.`);
+});
+
+// 3. Importurile pentru Discord și restul bibliotecilor
 const { 
     Client, 
     ActionRowBuilder, 
@@ -62,6 +76,7 @@ client.once('ready', async () => {
     }
 });
 
+// Funcția de verificare duală pe Roblox
 async function performDualSecurityCheck(member) {
     try {
         if (BLACKLISTED_DISCORD_USERS.includes(member.id)) {
@@ -125,6 +140,7 @@ async function performDualSecurityCheck(member) {
     }
 }
 
+// Eveniment: Când intră cineva nou pe server
 client.on('guildMemberAdd', async (member) => {
     const result = await performDualSecurityCheck(member);
     if (result.status === 'banned') return;
@@ -149,6 +165,7 @@ client.on('guildMemberAdd', async (member) => {
     }
 });
 
+// Eveniment: Interacțiuni cu comanda slash sau butonul
 client.on('interactionCreate', async (interaction) => {
     const isCommand = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.isCommand && interaction.isCommand());
     const isButton = interaction.isButton ? interaction.isButton() : interaction.componentType === 'BUTTON';
