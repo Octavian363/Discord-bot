@@ -80,7 +80,7 @@ function loadLocalTextBlacklists() {
     }
 }
 
-// Înregistrare comenzi Discord la pornirea aplicației
+// Înregistrare comenzi Discord la pornirea aplicației (REZOLVARE EROARE 400)
 client.once('ready', async () => {
     console.log(`🤖 Global Security Bot is online as ${client.user.tag}!`);
     
@@ -89,20 +89,38 @@ client.once('ready', async () => {
 
     try {
         console.log('🔄 Registering global slash commands via HTTP API...');
+        
+        // Luăm ID-ul aplicației în mod sigur direct din structura asincronă Discord
+        const appId = client.application?.id || client.user?.id;
+        if (!appId) {
+            throw new Error("ID-ul aplicatiei nu a putut fi identificat în cache la pornire.");
+        }
+
         const commandData = [
             {
                 name: 'scan',
-                description: 'Scaneaza toti membrii comunitatii comparand profilul cu listele Roblox si ID-urile din fisierele .txt.'
+                description: 'Scaneaza toti membrii comunitatii comparand profilul cu listele Roblox si ID-urile din fișierele .txt.'
             }
         ];
+
+        // Trimitem cererea securizată către endpoint-ul global al aplicației tale
         await axios.put(
-            `https://discord.com/api/v10/applications/${client.user.id}/commands`,
+            `https://discord.com/api/v10/applications/${appId}/commands`,
             commandData,
-            { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
+            { 
+                headers: { 
+                    Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 
+                    'Content-Type': 'application/json' 
+                } 
+            }
         );
         console.log('✅ Global Slash commands (/scan) registered successfully!');
     } catch (error) {
-        console.error('❌ Failed to register commands:', error.message);
+        if (error.response) {
+            console.error(`❌ Failed to register commands (API Error): Status ${error.response.status}`, JSON.stringify(error.response.data));
+        } else {
+            console.error('❌ Failed to register commands:', error.message);
+        }
     }
 });
 
