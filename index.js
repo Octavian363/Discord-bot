@@ -17,9 +17,7 @@ const {
     Client, 
     GatewayIntentBits,
     PermissionFlagsBits,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
+    ChannelType,
     AttachmentBuilder
 } = require('discord.js');
 const { Captcha } = require('captcha-canvas');
@@ -116,13 +114,13 @@ client.once('ready', async () => {
             },
             {
                 name: 'verify',
-                description: 'Enter the code from the generated image to unlock your account.',
+                description: 'Generate a verification image or submit your code to unlock access.',
                 options: [
                     {
                         name: 'code',
-                        description: 'Enter the exact text found in the verification image',
+                        description: 'Enter the exact text from your image (leave blank to request a new image / refresh)',
                         type: 3, // STRING Option Type
-                        required: true
+                        required: false // Changing this to false enables on-demand generation & refreshing!
                     }
                 ]
             }
@@ -133,7 +131,7 @@ client.once('ready', async () => {
             commandData,
             { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        console.log('✅ Global slash commands (/scan, /lockdown, /verify) successfully synchronized with Discord API!');
+        console.log('✅ Global slash commands synchronized successfully with dynamic optional structures!');
     } catch (error) {
         console.error('❌ API Command registration failed:', error.message);
     }
@@ -147,7 +145,19 @@ function getRobloxUsername(member) {
     return member.user.username;
 }
 
-// Comprehensive Security Check + Graphical Canvas CAPTCHA System (ALL IN ENGLISH)
+// Security Check and On-Demand generation helper
+async function generateAndSaveCaptcha(userId) {
+    const captcha = new Captcha();
+    captcha.async = true;
+    captcha.addDecoy(); 
+    captcha.drawTrace(); 
+    captcha.drawCaptcha();
+
+    // Store/Overwrite code in cache for dynamic refreshing
+    userCaptchas.set(userId, captcha.text);
+    return new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
+}
+
 async function performIndependentSecurityCheck(member, targetChannel = null, isBulkScan = false) {
     try {
         if (LOCKDOWN_MODE && !isBulkScan) {
@@ -156,14 +166,12 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
             return { status: 'banned', source: 'Anti-Raid' };
         }
 
-        // 1. LOCAL BLACKLIST DATABASE TEXT SCAN (.TXT)
         if (BLACKLISTED_DISCORD_USERS.includes(member.id)) {
             await member.send(`⚠️ You have been automatically banned. Reason: Flagged in Global Security Blacklist Database.`).catch(() => null);
             await member.ban({ reason: 'Automated Security: Listed in blacklist text files.' }).catch(() => null);
             return { status: 'banned', source: 'Discord' };
         }
 
-        // 2. ROBLOX CONDO GROUPS SECURE CHECK
         const robloxUsername = getRobloxUsername(member);
         const userResponse = await axios.post('https://users.roblox.com/v1/usernames/users', {
             usernames: [robloxUsername],
@@ -195,25 +203,16 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
             }
         }
 
-        // 3. GRAPHICAL CANVAS CAPTCHA EMISSION FOR HUMAN ACCOUNTS (ALL IN ENGLISH)
         if (targetChannel && !isBulkScan) {
             const unverifiedRole = member.guild.roles.cache.get(ROL_UNVERIFIED_ID);
             if (unverifiedRole) {
                 await member.roles.add(unverifiedRole).catch(() => null);
             }
 
-            const captcha = new Captcha();
-            captcha.async = true;
-            captcha.addDecoy(); 
-            captcha.drawTrace(); 
-            captcha.drawCaptcha();
-
-            userCaptchas.set(member.id, captcha.text);
-
-            const attachment = new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
+            const attachment = await generateAndSaveCaptcha(member.id);
 
             await targetChannel.send({
-                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
+                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access. If you cannot read the text, type \`/verify\` without any arguments to generate a fresh image!`,
                 files: [attachment]
             }).catch(() => null);
         }
@@ -226,7 +225,6 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
     }
 }
 
-// 📥 EVENT: Anti-Raid Burst Detection on User Join
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return; 
 
@@ -236,34 +234,46 @@ client.on('guildMemberAdd', async (member) => {
 
     if (joinLog.length > RAID_THRESHOLD && !LOCKDOWN_MODE) {
         LOCKDOWN_MODE = true;
-        let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === 0); // 0 = GuildText
+        let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === ChannelType.GuildText);
         if (targetChannel) {
             await targetChannel.send(`🚨 **Automated Anti-Raid System Activated!** A burst of malicious joins has been detected. Server entries are now under **LOCKDOWN** status.`).catch(() => null);
         }
     }
 
-    let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === 0);
+    let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === ChannelType.GuildText);
     await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENT: Interaction Processing (Completely Protected from "Application Did Not Respond")
+// 🚀 EVENT: Interaction Processing
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
     try {
-        // 1. THE MAIN /verify SLASH COMMAND HANDLER
+        // 1. THE REVOLUTIONARY /verify SLASH COMMAND (Handles Submission + Generation + Refreshing)
         if (interaction.commandName === 'verify') {
             const codIntrodus = interaction.options.getString('code');
             const userId = interaction.user.id;
 
+            // DYNAMIC REFRESH MECHANIC: If no code is supplied, create or refresh the image!
+            if (!codIntrodus) {
+                await interaction.deferReply({ ephemeral: true });
+                const attachment = await generateAndSaveCaptcha(userId);
+                
+                return interaction.editReply({
+                    content: `🛡️ **Fresh Verification Security Image Generated!**\nIf you couldn't read the previous code, look closely at this new visual challenge.\n\n✍️ **Instructions:** Type \`/verify\` again, click on the **code** option box, and type the characters you see in this image.`,
+                    files: [attachment]
+                });
+            }
+
+            // SUBMISSION SUB-ROUTINE: If code is supplied, check accuracy
             if (!userCaptchas.has(userId)) {
-                return interaction.reply({ content: '❌ You do not have an active security challenge to solve on this server.', ephemeral: true });
+                return interaction.reply({ content: '❌ Error: You do not have an active security image. Type \`/verify\` without any letters to generate one.', ephemeral: true });
             }
 
             const codCorect = userCaptchas.get(userId);
 
             if (codIntrodus.toUpperCase() === codCorect.toUpperCase()) {
-                userCaptchas.delete(userId); 
+                userCaptchas.delete(userId); // Clear challenge map securely
 
                 const unverifiedRole = interaction.guild.roles.cache.get(ROL_UNVERIFIED_ID);
                 const verifiedRole = interaction.guild.roles.cache.get(ROL_VERIFIED_ID);
@@ -271,13 +281,13 @@ client.on('interactionCreate', async (interaction) => {
                 if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole).catch(() => null);
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
 
-                return interaction.reply({ content: '✅ Verification successful! Your account has been authenticated. Welcome to the server!', ephemeral: true });
+                return interaction.reply({ content: '✅ Verification successful! Your account has been fully authenticated. Welcome to the server!', ephemeral: true });
             } else {
-                return interaction.reply({ content: '❌ Invalid code! Please read the image carefully and try the \`/verify\` command again.', ephemeral: true });
+                return interaction.reply({ content: '❌ Invalid code! Look closely at the canvas background lines and try the \`/verify\` command again. Leave it blank if you want a new image.', ephemeral: true });
             }
         }
 
-        // CHECK PERMISSIONS USING FORCED V14 SYNTAX
+        // ADMINISTRATIVE CHECK
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
         }
