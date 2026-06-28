@@ -7,24 +7,26 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Botul de securitate independent este online!\n');
+   res.end('Botul de securitate independent (Roblox + Folder .TXT) este online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Serverul de mentinere activa ruleaza pe portul ${port}.`);
 });
 
-// 3. Importurile pentru Discord și restul bibliotecilor
+// 3. Importurile pentru Discord, Axios și Sistemul de Fișiere (fs)
 const { 
     Client, 
     ChannelType
 } = require('discord.js');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
-// Activăm și Presence Intent (7) pentru a putea citi statusul utilizatorilor
+// Activăm și Presence Intent pentru a putea citi statusul utilizatorilor
 const client = new Client({
     intents: [1, 2, 512, 256] // Guilds, GuildMembers, GuildMessages, GuildPresences
 });
 
-// 🛡️ Baza ta de date cu ID-uri fixe Condo
+// 🛡️ Baza ta de date fixă cu ID-uri Condo de pe ROBLOX păstrată intactă
 const BLACKLISTED_ROBLOX_GROUPS = [
     33245612, 16482991, 15900234, 32441109, 17234901, 11400562, 34001922,
     15501928, 32991023, 12004958, 16772019, 33110294, 14920193, 11002938,
@@ -33,15 +35,64 @@ const BLACKLISTED_ROBLOX_GROUPS = [
     1234567, 89101112, 5544332, 9988776, 4455667, 2233445, 7766554, 1122334
 ]; 
 
-// Înregistrare comanda /scan prin Axios direct în Discord API
+// Memorie cache dinamică pentru ID-urile de Discord extrase din fișierele .txt
+let BLACKLISTED_DISCORD_USERS = [];
+
+// Funcție inteligentă care scanează folderul botului și citește automat TOATE fișierele .txt
+function loadLocalTextBlacklists() {
+    try {
+        let tempIds = [];
+        const directoryPath = __dirname;
+        
+        // Citim toate fișierele din folderul principal al botului
+        const files = fs.readdirSync(directoryPath);
+        
+        // Filtrăm doar fișierele care se termină în .txt
+        const txtFiles = files.filter(file => path.extname(file).toLowerCase() === '.txt');
+        
+        if (txtFiles.length === 0) {
+            console.log('⚠️ Nu s-a găsit niciun fișier .txt în folderul principal.');
+            return;
+        }
+
+        txtFiles.forEach(fileName => {
+            const filePath = path.join(directoryPath, fileName);
+            try {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                // Împărțim textul pe linii, curățăm caracterele invizibile gen \r și ignorăm liniile care nu sunt numere
+                const lines = content.split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0 && !isNaN(line));
+                
+                tempIds = tempIds.concat(lines);
+                console.log(`📁 S-au extras ${lines.length} ID-uri din fișierul local: ${fileName}`);
+            } catch (err) {
+                console.error(`❌ Eroare la citirea fișierului ${fileName}:`, err.message);
+            }
+        });
+
+        // Eliminăm duplicatele pentru a optimiza memoria botului
+        BLACKLISTED_DISCORD_USERS = [...new Set(tempIds)];
+        console.log(`✅ [SINC] Încărcare completă! Total ID-uri Discord unice în baza locală: ${BLACKLISTED_DISCORD_USERS.length}`);
+
+    } catch (error) {
+        console.error('❌ Eroare gravă la scanarea directoarelor pentru fișiere text:', error.message);
+    }
+}
+
+// Înregistrare comenzi Discord la pornirea aplicației
 client.once('ready', async () => {
     console.log(`🤖 Global Security Bot is online as ${client.user.tag}!`);
+    
+    // Încărcăm fișierele text imediat ce botul rulează
+    loadLocalTextBlacklists();
+
     try {
         console.log('🔄 Registering global slash commands via HTTP API...');
         const commandData = [
             {
                 name: 'scan',
-                description: 'Scaneaza toti membrii serverului impotriva listei de grupuri Condo.'
+                description: 'Scaneaza toti membrii comunitatii comparand profilul cu listele Roblox si ID-urile din fisierele .txt.'
             }
         ];
         await axios.put(
@@ -55,7 +106,7 @@ client.once('ready', async () => {
     }
 });
 
-// Funcție care încearcă să afle numele de Roblox (din status sau din username-ul de Discord)
+// Extragere asincronă a numelui de Roblox din status sau din profilul Discord
 function getRobloxUsername(member) {
     const customStatus = member.presence?.activities?.find(a => a.type === 4); 
     if (customStatus && customStatus.state) {
@@ -64,21 +115,32 @@ function getRobloxUsername(member) {
     return member.user.username;
 }
 
-// Funcția principală care verifică grupurile de Roblox direct prin API-ul oficial Roblox
-async function checkRobloxUserIndependent(robloxUsername, member, targetChannel = null, isBulkScan = false) {
+// Funcția centralizată de verificare a securității independente
+async function performIndependentSecurityCheck(member, targetChannel = null, isBulkScan = false) {
     try {
+        // 1. SECURITATE DISCORD (Din fișierele tale text încărcate)
+        if (BLACKLISTED_DISCORD_USERS.includes(member.id)) {
+            // Trimitem mesajul privat
+            await member.send(`⚠️ ${member.user.username} you have been banned from this server. Reason: Flagged in Blacklist Database.`).catch(() => null);
+            // Aplicăm ban-ul direct pe Discord
+            await member.ban({ reason: 'Independent Security: Utilizator listat în fișierele text (.txt).' }).catch(() => null);
+            return { status: 'banned', source: 'Discord' };
+        }
+
+        // 2. SECURITATE ROBLOX (Din lista fixă de ID-uri)
+        const robloxUsername = getRobloxUsername(member);
         const userResponse = await axios.post('https://users.roblox.com/v1/usernames/users', {
             usernames: [robloxUsername],
             excludeBannedUsers: false
         });
 
         if (!userResponse.data || !userResponse.data.data.length) {
-            return { status: 'not_found' };
+            return { status: 'safe' };
         }
 
         const robloxId = userResponse.data.data[0].id;
-
         const groupsResponse = await axios.get(`https://groups.roblox.com/v2/users/${robloxId}/groups/roles`);
+        
         if (!groupsResponse.data || !groupsResponse.data.data) {
             return { status: 'error' };
         }
@@ -95,14 +157,13 @@ async function checkRobloxUserIndependent(robloxUsername, member, targetChannel 
             }
         }
 
+        // 3. EXECUTARE ACȚIUNI
         if (isInCondo) {
-            // Trimite mesajul privat exact așa cum ai cerut
             await member.send(`⚠️ ${member.user.username} you have been banned from the group ${flaggedGroupName}`).catch(() => null);
-            // Execută ban-ul pe Discord
-            await member.ban({ reason: `Independent Security: Membru in grupul Condo listat (${flaggedGroupName})` }).catch(() => null);
-            return { status: 'banned', groupName: flaggedGroupName };
+            await member.ban({ reason: `Independent Security: Membru Roblox în grupul Condo listat (${flaggedGroupName})` }).catch(() => null);
+            return { status: 'banned', source: 'Roblox', reason: flaggedGroupName };
         } else {
-            // Trimitem mesaj normal pe chat DOAR dacă e intrare de membru nou (la scanarea generală nu facem spam)
+            // Trimitem mesaj pe canal doar la intrările de membri noi (la /scan general nu aglomerăm chat-ul)
             if (targetChannel && !isBulkScan) {
                 await targetChannel.send(`✅ ${member.user.username} your account is safe`).catch(() => null);
             }
@@ -114,48 +175,43 @@ async function checkRobloxUserIndependent(robloxUsername, member, targetChannel 
     }
 }
 
-// 📥 EVENIMENT: Când un membru nou intră pe server (Scanare automată)
+// 📥 EVENIMENT AUTOMAT: Declanșat la intrarea unui utilizator nou pe server
 client.on('guildMemberAdd', async (member) => {
-    const robloxName = getRobloxUsername(member);
-    
     let targetChannel = member.guild.systemChannel;
     if (!targetChannel) {
         targetChannel = member.guild.channels.cache.find(
             channel => channel.type === ChannelType.GuildText || channel.type === 'GUILD_TEXT'
         );
     }
-
-    await checkRobloxUserIndependent(robloxName, member, targetChannel, false);
+    await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENIMENT: Executarea comenzii globale /scan (Mesaje întregi, vizibile de toți)
+// 🚀 EVENIMENT MANUAL: Executarea comenzii `/scan` pentru tot serverul (Mesaj normal pe chat)
 client.on('interactionCreate', async (interaction) => {
     const isSlashCommand = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.isCommand && interaction.isCommand());
     if (!isSlashCommand) return;
 
     if (interaction.commandName === 'scan') {
-        // Am eliminat complet { ephemeral: true } ca să fie un mesaj normal, întreg pe chat
         await interaction.deferReply(); 
 
         if (!interaction.member.permissions.has('ADMINISTRATOR') && !interaction.member.permissions.has('Administrator')) {
-            return interaction.editReply('❌ Nu ai permisiunea de Administrator pentru a scana serverul.');
+            return interaction.editReply('❌ Nu ai permisiunea de Administrator pentru a utiliza această comandă.');
         }
 
-        // Luăm canalul de text unde s-a dat comanda
-        const channel = interaction.channel;
+        // Reîncărcăm fișierele text dinamice chiar în momentul scanării, în caz că ai adăugat/șters ID-uri între timp
+        loadLocalTextBlacklists();
 
+        const channel = interaction.channel;
         const members = await interaction.guild.members.fetch();
         let safeCount = 0;
         let bannedCount = 0;
 
-        await interaction.editReply(`🔄 Se începe scanarea serverului pentru toți cei ${members.size} membri...`);
+        await interaction.editReply(`🔄 Se începe scanarea completă pentru cei ${members.size} membri utilizând listele Roblox și fișierele text...`);
 
         for (const [id, member] of members) {
             if (member.user.bot) continue;
 
-            const robloxName = getRobloxUsername(member);
-            // Activam flag-ul true ca sa stie ca e scanare generala si sa nu umple chatul cu "your account is safe" pentru fiecare om
-            const result = await checkRobloxUserIndependent(robloxName, member, channel, true); 
+            const result = await performIndependentSecurityCheck(member, channel, true); 
 
             if (result.status === 'safe') {
                 safeCount++;
@@ -164,8 +220,7 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // Trimitem raportul final ca mesaj întreg pe canal, vizibil pentru toți
-        await interaction.editReply(`📊 **Scanare completă!** Toți membrii au fost analizați.\n✅ Conturi sigure: ${safeCount}\n🔨 Conturi periculoase eliminate: ${bannedCount}`).catch(() => null);
+        await interaction.editReply(`📊 **Scanare structurală finalizată!**\n✅ Utilizatori declarați siguri: ${safeCount}\n🔨 Utilizatori periculoși eliminați de pe server: ${bannedCount}`).catch(() => null);
     }
 });
 
