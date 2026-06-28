@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Scut de Securitate Global (CAPTCHA Obligatoriu pentru Toti Oamenii) Online!\n');
+   res.end('Scut de Securitate Global (CAPTCHA Vizibil Obligatoriu) Online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Serverul ruleaza pe portul ${port}.`);
 });
@@ -30,7 +30,7 @@ const client = new Client({
 });
 
 // 🛡️ CONFIGURARE ROLURI PENTRU CAPTCHA (Pune ID-urile reale din serverul tău aici)
-const ROL_UNVERIFIED_ID = 'ID_ROL_NEVERIFICAT'; // Rol restrictiv primit la intrare (opțional)
+const ROL_UNVERIFIED_ID = 'ID_ROL_NEVERIFICAT'; // Rol restrictiv primit la intrare
 const ROL_VERIFIED_ID = 'ID_ROL_VERIFICAT';     // Rolul general de acces primit după CAPTCHA
 
 // 🛑 SISTEM AUTOMAT ANTI-RAID
@@ -171,22 +171,25 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
             }
         }
 
-        // 3. OBLIGATORIU: TESTUL CAPTCHA PENTRU TOȚI OAMENII (Inclusiv conturi de Admin/Mod care reintră)
+        // 3. GENERARE CAPTCHA VIZIBIL (Buton forțat grafic pe ecran)
         if (targetChannel && !isBulkScan) {
-            // Îi punem rolul de Neverificat (dacă este configurat în server)
+            // Încercăm să îi dăm rolul unverified (dar dacă e admin deținător de drepturi, prindem eroarea)
             const unverifiedRole = member.guild.roles.cache.get(ROL_UNVERIFIED_ID);
-            if (unverifiedRole) await member.roles.add(unverifiedRole).catch(() => null);
+            if (unverifiedRole) {
+                await member.roles.add(unverifiedRole).catch(err => console.log(`[INFO] Nu am putut adăuga rolul inițial (probabil permisiuni mari): ${err.message}`));
+            }
 
-            // Construim butonul Anti-Phishing și Anti-Bot
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('verify_captcha_button')
-                    .setLabel('Verificare Securitate (Apasă aici) 🔓')
-                    .setStyle(ButtonStyle.Danger) // Culoare roșie pentru atenție sporită
-            );
+            // Construim componenta butonului într-un mod strict definit
+            const verifyButton = new ButtonBuilder()
+                .setCustomId('verify_captcha_button')
+                .setLabel('Verificare Securitate (Apasă aici pentru acces) 🔓')
+                .setStyle(ButtonStyle.Danger);
 
+            const row = new ActionRowBuilder().addComponents(verifyButton);
+
+            // Trimitem mesajul clar pe canalul dedicat
             await targetChannel.send({
-                content: `🛡️ **Sistem de Securitate Global**\nBun venit ${member}! Toate conturile (utilizatori, moderatori și administratori) trebuie să finalizeze verificarea anti-hijack.\n\n**Apasă pe butonul de mai jos pentru a primi acces.**`,
+                content: `🛡️ **Sistem de Securitate Global (Anti-Hijack & Anti-Bot)**\nBun venit ${member}! Toate conturile umane (inclusiv moderatori și administratori) trebuie să finalizeze verificarea de siguranță.\n\n*Apasă pe butonul roșu de mai jos pentru a primi acces complet pe server.*`,
                 components: [row]
             }).catch(() => null);
         }
@@ -194,14 +197,14 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
         return { status: 'safe' };
 
     } catch (error) {
+        console.error("Eroare la verificarea de securitate:", error);
         return { status: 'error' };
     }
 }
 
 // 📥 EVENIMENT: Intrări membri noi pe server
 client.on('guildMemberAdd', async (member) => {
-    // Ignorăm complet boții autorizați (ei primesc acces direct, dar nu sunt oameni)
-    if (member.user.bot) return;
+    if (member.user.bot) return; // Ignorăm roboții, doar oamenii trec prin CAPTCHA
 
     const now = Date.now();
     joinLog.push(now);
@@ -251,11 +254,11 @@ client.on('interactionCreate', async (interaction) => {
         return;
     }
 
-    // B. PROCESARE VERIFICARE BUTON (APLICABILĂ TUTUROR UTILIZATORILOR UMANI)
+    // B. PROCESARE VERIFICARE BUTON VIZIBIL
     if (interaction.isButton() && interaction.customId === 'verify_captcha_button') {
         const member = interaction.member;
 
-        // Verificăm dacă are deja rolul de verificat pentru a preveni spam-ul pe buton
+        // Verificăm dacă are deja rolul de verificat pentru a opri spamul
         if (member.roles.cache.has(ROL_VERIFIED_ID)) {
             return interaction.reply({ content: '❌ Acest cont deține deja acces complet pe server!', ephemeral: true });
         }
@@ -264,17 +267,17 @@ client.on('interactionCreate', async (interaction) => {
             const unverifiedRole = interaction.guild.roles.cache.get(ROL_UNVERIFIED_ID);
             const verifiedRole = interaction.guild.roles.cache.get(ROL_VERIFIED_ID);
 
-            // Eliminăm restricția (dacă există) și acordăm rolul de acces
-            if (unverifiedRole) await member.roles.remove(unverifiedRole);
-            if (verifiedRole) await member.roles.add(verifiedRole);
+            // Folosim .catch(() => null) la fiecare modificare de rol pentru ca dacă utilizatorul e admin suprem, botul să nu dea crash, ci doar să-i dea mesajul de succes
+            if (unverifiedRole) await member.roles.remove(unverifiedRole).catch(() => null);
+            if (verifiedRole) await member.roles.add(verifiedRole).catch(() => null);
 
             await interaction.reply({ content: '✅ Verificare aprobată! Identitatea ta a fost confirmată cu succes. Ai primit acces.', ephemeral: true });
             
-            // Ștergem mesajul cu buton din canal pentru a menține curățenia
+            // Ștergem mesajul de pe canal ca să rămână curat
             await interaction.message.delete().catch(() => null);
 
         } catch (err) {
-            await interaction.reply({ content: '❌ Eroare la actualizarea rolurilor pe Discord. Verifică ierarhia botului.', ephemeral: true });
+            await interaction.reply({ content: '❌ Eroare la actualizarea rolurilor pe Discord.', ephemeral: true });
         }
     }
 });
