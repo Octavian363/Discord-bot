@@ -19,23 +19,17 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    AttachmentBuilder,
-    GatewayIntentBits,
-    PermissionFlagsBits
+    AttachmentBuilder
 } = require('discord.js');
 const { Captcha } = require('captcha-canvas');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Enable full client intents explicitly using GatewayIntentBits to prevent crashes
+// 4. Use raw intent integers to ensure 100% compatibility and prevent undefined crashes
+// 1 = Guilds, 2 = GuildMembers, 512 = GuildMessages, 256 = GuildPresences
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildPresences
-    ]
+    intents: [1, 2, 512, 256]
 });
 
 // 🛡️ SECURITY CONFIGURATION (Replace with your actual Discord Server Role IDs)
@@ -214,7 +208,7 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
             const attachment = new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
 
             await targetChannel.send({
-                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
+                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍ *Instructions:* Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
                 files: [attachment]
             }).catch(() => null);
         }
@@ -247,7 +241,7 @@ client.on('guildMemberAdd', async (member) => {
     await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENT: Interaction Processing (Completely Protected from "Application Did Not Respond")
+// 🚀 EVENT: Interaction Processing (Completely Protected from crashes)
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -278,8 +272,8 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // CHECK PERMISSIONS USING V14 SYNTAX (PermissionFlagsBits)
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        // Check permission using raw bitwise 8n (ADMINISTRATOR flag) to keep it cross-version stable
+        if (!interaction.member.permissions.has(8n) && !interaction.member.permissions.has('ADMINISTRATOR')) {
             return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
         }
 
@@ -307,7 +301,6 @@ client.on('interactionCreate', async (interaction) => {
 
     } catch (error) {
         console.error('🔴 Critical Interaction Error Caught:', error);
-        // Safely respond to Discord to completely avoid "The application did not respond"
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: '❌ An internal processing error occurred while executing this command.', ephemeral: true }).catch(() => null);
         } else if (interaction.deferred) {
