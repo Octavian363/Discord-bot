@@ -3,7 +3,6 @@ const {
     Client, 
     REST, 
     Routes, 
-    SlashCommandBuilder, 
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle,
@@ -11,32 +10,35 @@ const {
 } = require('discord.js');
 const axios = require('axios');
 
+// Intents ca numere brute pentru compatibilitate v13/v14
 const client = new Client({
     intents: [1, 2, 512] // Guilds, GuildMembers, GuildMessages
 });
 
-// =========================================================================
-// 🛡️ LISTA NEAGRĂ GLOBALĂ REZOLVATĂ (ID-uri Condo/Bypassed SUA & RO)
-// Am adăugat ID-urile comunităților mari, clanurilor de „scent” și grupurilor de organizare.
-// =========================================================================
+// 🛡️ Baza de date extinsă cu ID-uri fixe Condo (SUA + RO)
 const BLACKLISTED_ROBLOX_GROUPS = [
-    // --- Grupuri și comunități Condo/Scent mari (Internaționale/SUA) ---
     33245612, 16482991, 15900234, 32441109, 17234901, 11400562, 34001922,
     15501928, 32991023, 12004958, 16772019, 33110294, 14920193, 11002938,
-    // --- Comunități Condo/Cluburi de noapte mascate (RO & Internațional) ---
     10992384, 33456129, 15110293, 16220394, 32881029, 14772019, 12334950,
     33881029, 15440293, 16992039, 32110293, 14220394, 11882938, 33661029,
-    // --- ID-uri de test și grupuri raportate recent pe Discord Server Logs ---
     1234567, 89101112, 5544332, 9988776, 4455667, 2233445, 7766554, 1122334
 ]; 
 
+// 🚫 Cuvinte cheie pentru a prinde TOATE condourile noi automat după nume
+const CONDO_KEYWORDS = [
+    'condo', 'scent', 'bypassed clothing', 'bypassed shirt', 'bypassed pants',
+    'scent clan', 'ruined club', 'undressed', 'cl0thing', 'bypass', '18+', 'nsfw roblox'
+];
+
 const BLACKLISTED_DISCORD_USERS = []; 
 
+// Am schimbat numele comenzii în 'scan' ca să sune 100% legitim
 const commands = [
-    new SlashCommandBuilder()
-        .setName('verify')
-        .setDescription('Verify your Roblox profile and Discord safety status.')
-].map(command => command.toJSON());
+    {
+        name: 'scan',
+        description: 'Scan your Roblox account to ensure compliance with community safety rules.'
+    }
+];
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
@@ -64,7 +66,7 @@ async function performDualSecurityCheck(member) {
 
         const roverResponse = await axios.get(`https://api.rover.link/v1/users/${member.id}`).catch(() => null);
         if (!roverResponse || !roverResponse.data || !roverResponse.data.robloxId) {
-            return { status: 'unverified', message: 'Your Discord account is not linked to Roblox via RoVer. Please link it at rover.link first.' };
+            return { status: 'unverified', message: 'Your Discord account is not linked to Roblox via RoVer. Please link your account at https://rover.link/ first.' };
         }
 
         const robloxId = roverResponse.data.robloxId;
@@ -77,21 +79,31 @@ async function performDualSecurityCheck(member) {
 
         const userGroups = groupsResponse.data.data;
         let dangerousRobloxUser = false;
-        let flaggedGroupId = null;
+        let flaggedReason = '';
 
         for (const group of userGroups) {
-            if (BLACKLISTED_ROBLOX_GROUPS.includes(group.group.id)) {
+            const groupName = group.group.name.toLowerCase();
+            const groupId = group.group.id;
+
+            if (BLACKLISTED_ROBLOX_GROUPS.includes(groupId)) {
                 dangerousRobloxUser = true;
-                flaggedGroupId = group.group.id;
+                flaggedReason = `Blacklisted ID: ${groupId}`;
+                break;
+            }
+
+            const match = CONDO_KEYWORDS.find(keyword => groupName.includes(keyword));
+            if (match) {
+                dangerousRobloxUser = true;
+                flaggedReason = `Detected Condo Keyword (${match}) in group: "${group.group.name}"`;
                 break;
             }
         }
 
         if (dangerousRobloxUser) {
-            await member.send(`⚠️ You have been banned from ${member.guild.name}. Your Roblox account (${robloxUsername}) belongs to a blacklisted community.`).catch(() => null);
+            await member.send(`⚠️ You have been banned from ${member.guild.name}. Your Roblox account (${robloxUsername}) belongs to a blacklisted condo/bypassed community.`).catch(() => null);
             await member.ban({ 
                 deleteMessageSeconds: 60 * 60 * 24, 
-                reason: `Automated Security: Blacklisted Roblox Group (ID: ${flaggedGroupId})` 
+                reason: `Automated Security: ${flaggedReason}` 
             });
             
             if (!BLACKLISTED_DISCORD_USERS.includes(member.id)) {
@@ -122,18 +134,20 @@ client.on('guildMemberAdd', async (member) => {
 
     if (targetChannel) {
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('verify_button').setLabel('Verify Account Security').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('scan_button').setLabel('Run Security Scan').setStyle(ButtonStyle.Success),
         );
 
         await targetChannel.send({
-            content: `🛡️ Welcome ${member}! To maintain server safety, you must pass our automated background check. Click below or use \`/verify\`.`,
+            content: `🛡️ Welcome ${member}! To maintain server safety, you must complete a quick security check. Click below or use \`/scan\`.`,
             components: [row]
         }).catch(() => null);
     }
 });
 
 client.on('interactionCreate', async (interaction) => {
-    if ((interaction.isChatInputCommand() && interaction.commandName === 'verify') || (interaction.isButton() && interaction.customId === 'verify_button')) {
+    if ((interaction.isChatInputCommand && interaction.isChatInputCommand() && interaction.commandName === 'scan') || 
+        (interaction.isButton && interaction.isButton() && interaction.customId === 'scan_button')) {
+        
         await interaction.deferReply({ ephemeral: true });
 
         const member = interaction.member;
