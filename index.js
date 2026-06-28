@@ -80,7 +80,7 @@ function loadLocalTextBlacklists() {
     }
 }
 
-// Înregistrare comenzi Discord la pornirea aplicației (REZOLVARE EROARE 400)
+// Înregistrare comenzi Discord la pornirea aplicației (CORECTAT PENTRU LIMITA DE CARACTERE)
 client.once('ready', async () => {
     console.log(`🤖 Global Security Bot is online as ${client.user.tag}!`);
     
@@ -99,7 +99,7 @@ client.once('ready', async () => {
         const commandData = [
             {
                 name: 'scan',
-                description: 'Scaneaza toti membrii comunitatii comparand profilul cu listele Roblox si ID-urile din fișierele .txt.'
+                description: 'Scaneaza serverul folosind listele Roblox si ID-urile din fisierele text.'
             }
         ];
 
@@ -204,7 +204,7 @@ client.on('guildMemberAdd', async (member) => {
     await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENIMENT MANUAL: Executarea comenzii `/scan` pentru tot serverul (Mesaj normal pe chat)
+// 🚀 EVENIMENT MANUAL: Executareacomenzii `/scan` pentru tot serverul (Mesaj normal pe chat)
 client.on('interactionCreate', async (interaction) => {
     const isSlashCommand = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.isCommand && interaction.isCommand());
     if (!isSlashCommand) return;
