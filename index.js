@@ -1,4 +1,4 @@
-// 1. Înrcărcăm variabilele de mediu (.env) primele pentru siguranță
+// 1. Încărcăm variabilele de mediu (.env) primele pentru siguranță
 require('dotenv').config();
 
 // 2. Serverul web HTTP cerut de Render pentru a preveni eroarea de "Timeout"
@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Botul de securitate este online si ruleaza 24/7!\n');
+   res.end('Botul de securitate independent este online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Serverul de mentinere activa ruleaza pe portul ${port}.`);
 });
@@ -15,19 +15,16 @@ http.createServer((req, res) => {
 // 3. Importurile pentru Discord și restul bibliotecilor
 const { 
     Client, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle,
     ChannelType
 } = require('discord.js');
 const axios = require('axios');
 
-// Intents ca numere brute pentru compatibilitate 100% v13/v14
+// Activăm și Presence Intent (7) pentru a putea citi statusul utilizatorilor
 const client = new Client({
-    intents: [1, 2, 512] // Guilds, GuildMembers, GuildMessages
+    intents: [1, 2, 512, 256] // Guilds, GuildMembers, GuildMessages, GuildPresences
 });
 
-// 🛡️ Baza de date cu ID-uri fixe Condo (SUA + RO)
+// 🛡️ Baza ta de date cu ID-uri fixe Condo
 const BLACKLISTED_ROBLOX_GROUPS = [
     33245612, 16482991, 15900234, 32441109, 17234901, 11400562, 34001922,
     15501928, 32991023, 12004958, 16772019, 33110294, 14920193, 11002938,
@@ -36,156 +33,148 @@ const BLACKLISTED_ROBLOX_GROUPS = [
     1234567, 89101112, 5544332, 9988776, 4455667, 2233445, 7766554, 1122334
 ]; 
 
-// 🚫 Cuvinte cheie extinse la maximum pentru a prinde TOATE condourile (România + SUA)
-const CONDO_KEYWORDS = [
-    'condo', 'scent', 'bypassed clothing', 'bypassed shirt', 'bypassed pants',
-    'scent clan', 'ruined club', 'undressed', 'cl0thing', 'bypass', '18+', 'nsfw roblox',
-    'scent community', 'bypassed attire', 'vibe condo', 'condos', 'scents', 'strip club', 
-    'bypassed', 'baepassed', 'unbypassed', '18+ club'
-];
-
-const BLACKLISTED_DISCORD_USERS = []; 
-
-// Înregistrare comenzi prin Axios (Evită REST și erorile de versiune din discord.js)
+// Înregistrare comanda /scan prin Axios direct în Discord API
 client.once('ready', async () => {
     console.log(`🤖 Global Security Bot is online as ${client.user.tag}!`);
     try {
         console.log('🔄 Registering global slash commands via HTTP API...');
-        
         const commandData = [
             {
                 name: 'scan',
-                description: 'Scan your Roblox account to ensure compliance with community safety rules.'
+                description: 'Scaneaza toti membrii serverului impotriva listei de grupuri Condo.'
             }
         ];
-
         await axios.put(
             `https://discord.com/api/v10/applications/${client.user.id}/commands`,
             commandData,
-            {
-                headers: {
-                    Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
-                    'Content-Type': 'application/json'
-                }
-            }
+            { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        
         console.log('✅ Global Slash commands (/scan) registered successfully!');
     } catch (error) {
-        console.error('❌ Failed to register commands:', error.response ? error.response.data : error.message);
+        console.error('❌ Failed to register commands:', error.message);
     }
 });
 
-// Funcția de verificare duală pe Roblox
-async function performDualSecurityCheck(member) {
+// Funcție care încearcă să afle numele de Roblox (din status sau din username-ul de Discord)
+function getRobloxUsername(member) {
+    // 1. Verificăm dacă are pus un text în Custom Status (ex: "Roblox: NumeleLui")
+    const customStatus = member.presence?.activities?.find(a => a.type === 4); // 4 = Custom Status
+    if (customStatus && customStatus.state) {
+        return customStatus.state.trim();
+    }
+    // 2. Dacă nu are status, presupunem că numele lui de Discord este același cu cel de Roblox
+    return member.user.username;
+}
+
+// Funcția principală care verifică grupurile de Roblox direct prin API-ul oficial Roblox
+async function checkRobloxUserIndependent(robloxUsername, member, interactionOrChannel = null) {
     try {
-        if (BLACKLISTED_DISCORD_USERS.includes(member.id)) {
-            await member.send(`⚠️ You are globally blacklisted from ${member.guild.name}.`).catch(() => null);
-            await member.ban({ reason: 'Global Blacklist: Dangerous User Asset.' });
-            return { status: 'banned' };
+        // Pasul A: Luăm ID-ul de Roblox direct după username
+        const userResponse = await axios.post('https://users.roblox.com/v1/usernames/users', {
+            usernames: [robloxUsername],
+            excludeBannedUsers: false
+        });
+
+        if (!userResponse.data || !userResponse.data.data.length) {
+            return { status: 'not_found' };
         }
 
-        const roverResponse = await axios.get(`https://api.rover.link/v1/users/${member.id}`).catch(() => null);
-        if (!roverResponse || !roverResponse.data || !roverResponse.data.robloxId) {
-            return { status: 'unverified', message: 'Your Discord account is not linked to Roblox via RoVer. Please link your account at https://rover.link/ first.' };
-        }
+        const robloxId = userResponse.data.data[0].id;
 
-        const robloxId = roverResponse.data.robloxId;
-        const robloxUsername = roverResponse.data.cachedUsername;
-
+        // Pasul B: Interogăm grupurile în care se află acest ID de Roblox
         const groupsResponse = await axios.get(`https://groups.roblox.com/v2/users/${robloxId}/groups/roles`);
         if (!groupsResponse.data || !groupsResponse.data.data) {
-            return { status: 'error', message: 'Failed to access your Roblox group configurations.' };
+            return { status: 'error' };
         }
 
         const userGroups = groupsResponse.data.data;
-        let dangerousRobloxUser = false;
-        let flaggedReason = '';
+        let isInCondo = false;
+        let flaggedGroupName = '';
 
         for (const group of userGroups) {
-            const groupName = group.group.name.toLowerCase();
-            const groupId = group.group.id;
-
-            if (BLACKLISTED_ROBLOX_GROUPS.includes(groupId)) {
-                dangerousRobloxUser = true;
-                flaggedReason = `Blacklisted ID: ${groupId}`;
-                break;
-            }
-
-            const match = CONDO_KEYWORDS.find(keyword => groupName.includes(keyword));
-            if (match) {
-                dangerousRobloxUser = true;
-                flaggedReason = `Detected Condo Keyword (${match}) in group: "${group.group.name}"`;
+            if (BLACKLISTED_ROBLOX_GROUPS.includes(group.group.id)) {
+                isInCondo = true;
+                flaggedGroupName = group.group.name;
                 break;
             }
         }
 
-        if (dangerousRobloxUser) {
-            await member.send(`⚠️ You have been banned from ${member.guild.name}. Your Roblox account (${robloxUsername}) belongs to a blacklisted condo/bypassed community.`).catch(() => null);
-            await member.ban({ 
-                deleteMessageSeconds: 60 * 60 * 24, 
-                reason: `Automated Security: ${flaggedReason}` 
-            });
-            
-            if (!BLACKLISTED_DISCORD_USERS.includes(member.id)) {
-                BLACKLISTED_DISCORD_USERS.push(member.id);
+        // Pasul C: Aplicăm acțiunile cerute de tine
+        if (isInCondo) {
+            // Îi trimitem mesaj privat înainte de ban
+            await member.send(`⚠️ ${member.user.username} you have been banned from the group ${flaggedGroupName}`).catch(() => null);
+            // Îi dăm ban de pe serverul de Discord
+            await member.ban({ reason: `Independent Security: Membru in grupul Condo ID listat (${flaggedGroupName})` }).catch(() => null);
+            return { status: 'banned', groupName: flaggedGroupName };
+        } else {
+            // Dacă este safe, trimitem mesajul pe canalul public/interacțiune
+            if (interactionOrChannel) {
+                if (interactionOrChannel.editReply) {
+                    // Dacă e răspuns la comanda /scan
+                    await interactionOrChannel.followUp({ content: `✅ ${member.user.username} your account is safe`, ephemeral: true }).catch(() => null);
+                } else {
+                    // Dacă e mesaj pe canal la intrare
+                    await interactionOrChannel.send(`✅ ${member.user.username} your account is safe`).catch(() => null);
+                }
             }
-            return { status: 'banned' };
+            return { status: 'safe' };
         }
-
-        return { status: 'safe', username: robloxUsername };
 
     } catch (error) {
-        return { status: 'error', message: 'An error occurred during verification.' };
+        return { status: 'error' };
     }
 }
 
-// Eveniment: Când intră cineva nou pe server
+// 📥 EVENIMENT: Când un membru nou intră pe server (Scanare automată)
 client.on('guildMemberAdd', async (member) => {
-    const result = await performDualSecurityCheck(member);
-    if (result.status === 'banned') return;
-
+    const robloxName = getRobloxUsername(member);
+    
     let targetChannel = member.guild.systemChannel;
-
     if (!targetChannel) {
         targetChannel = member.guild.channels.cache.find(
             channel => channel.type === ChannelType.GuildText || channel.type === 'GUILD_TEXT'
         );
     }
 
-    if (targetChannel) {
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('scan_button').setLabel('Run Security Scan').setStyle(ButtonStyle.Success || 'SUCCESS'),
-        );
-
-        await targetChannel.send({
-            content: `🛡️ Welcome ${member}! To maintain server safety, you must complete a quick security check. Click below or use \`/scan\`.`,
-            components: [row]
-        }).catch(() => null);
-    }
+    // Îl scanăm direct pe baza numelui aflat
+    await checkRobloxUserIndependent(robloxName, member, targetChannel);
 });
 
-// Eveniment: Interacțiuni cu comanda slash sau butonul
+// 🚀 EVENIMENT: Executarea comenzii globale /scan pentru toți membrii comunității
 client.on('interactionCreate', async (interaction) => {
-    const isCommand = interaction.isChatInputCommand ? interaction.isChatInputCommand() : (interaction.isCommand && interaction.isCommand());
-    const isButton = interaction.isButton ? interaction.isButton() : interaction.componentType === 'BUTTON';
+    if (!interaction.isChatInputCommand()) return;
 
-    if ((isCommand && interaction.commandName === 'scan') || (isButton && interaction.customId === 'scan_button')) {
-        
+    if (interaction.commandName === 'scan') {
         await interaction.deferReply({ ephemeral: true });
 
-        const member = interaction.member;
-        const result = await performDualSecurityCheck(member);
-
-        if (result.status === 'banned') return;
-        
-        if (result.status === 'unverified') {
-            await interaction.editReply({ content: `❌ ${result.message}` });
-        } else if (result.status === 'error') {
-            await interaction.editReply({ content: `⚠️ ${result.message}` });
-        } else if (result.status === 'safe') {
-            await interaction.editReply({ content: `✅ **Clear!** Your Discord account and Roblox profile (**${result.username}**) have passed all security protocols. Access granted.` });
+        // Doar administratorii pot rula scanarea generală
+        if (!interaction.member.permissions.has('Administrator')) {
+            return interaction.editReply('❌ Nu ai permisiunea de Administrator pentru a scana serverul.');
         }
+
+        const members = await interaction.guild.members.fetch();
+        let safeCount = 0;
+        let bannedCount = 0;
+
+        await interaction.editReply(`🔄 Se începe scanarea independență a celor ${members.size} membri...`);
+
+        for (const [id, member] of members) {
+            if (member.user.bot) continue;
+
+            const robloxName = getRobloxUsername(member);
+            const result = await checkRobloxUserIndependent(robloxName, member, interaction);
+
+            if (result.status === 'safe') {
+                safeCount++;
+            } else if (result.status === 'banned') {
+                bannedCount++;
+            }
+        }
+
+        await interaction.followUp({ 
+            content: `📊 **Scanare completă!** Toti membrii au fost verificați direct pe Roblox.\n✅ Conturi sigure raportate: ${safeCount}\n🔨 Conturi periculoase eliminate: ${bannedCount}`, 
+            ephemeral: true 
+        });
     }
 });
 
