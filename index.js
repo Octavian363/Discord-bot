@@ -21,9 +21,23 @@ const {
     AttachmentBuilder
 } = require('discord.js');
 const { Captcha } = require('captcha-canvas');
+const { registerFont } = require('canvas'); // Required to fix Render's missing fonts bug!
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+
+// 🔍 REGISTER LOCAL FONT BEFORE BOT LAUNCH
+try {
+    const fontPath = path.join(__dirname, 'captcha-font.ttf');
+    if (fs.existsSync(fontPath)) {
+        registerFont(fontPath, { family: 'CaptchaCustomFont' });
+        console.log('✅ [FONT] Custom CAPTCHA font successfully registered for Linux environment!');
+    } else {
+        console.log('⚠️ [FONT] "captcha-font.ttf" not found in directory. Text might be invisible on Render.');
+    }
+} catch (fontError) {
+    console.error('❌ [FONT] Failed to register local font:', fontError.message);
+}
 
 // Enable full client intents using standard v14 layout
 const client = new Client({
@@ -42,7 +56,7 @@ const ROL_VERIFIED_ID = 'ID_ROL_VERIFICAT';     // Main access member role given
 // Memory cache to map active CAPTCHAs (User ID -> Generated Code Text)
 const userCaptchas = new Map();
 
-// 🛑 AUTOMATED ANTI-RAID SYSTEM (Protection for Crypto/NFT/Twitch servers)
+// 🛑 AUTOMATED ANTI-RAID SYSTEM
 let joinLog = []; 
 const RAID_THRESHOLD = 5; 
 const RAID_INTERVAL = 3000; 
@@ -57,7 +71,6 @@ const BLACKLISTED_ROBLOX_GROUPS = [
     1234567, 89101112, 5544332, 9988776, 4455667, 2233445, 7766554, 1122334
 ]; 
 
-// Dynamic memory cache for local text database (.txt files)
 let BLACKLISTED_DISCORD_USERS = [];
 
 function loadLocalTextBlacklists() {
@@ -67,10 +80,7 @@ function loadLocalTextBlacklists() {
         const files = fs.readdirSync(directoryPath);
         const txtFiles = files.filter(file => path.extname(file).toLowerCase() === '.txt');
         
-        if (txtFiles.length === 0) {
-            console.log('⚠️ No local .txt database files found in the directory.');
-            return;
-        }
+        if (txtFiles.length === 0) return;
 
         txtFiles.forEach(fileName => {
             const filePath = path.join(directoryPath, fileName);
@@ -79,7 +89,6 @@ function loadLocalTextBlacklists() {
                 const lines = content.split(/\r?\n/)
                     .map(line => line.trim())
                     .filter(line => line.length > 0 && !isNaN(line));
-                
                 tempIds = tempIds.concat(lines);
             } catch (err) {
                 console.error(`❌ Error reading database file ${fileName}:`, err.message);
@@ -88,13 +97,11 @@ function loadLocalTextBlacklists() {
 
         BLACKLISTED_DISCORD_USERS = [...new Set(tempIds)];
         console.log(`✅ [SYNC] Database loaded successfully! Total unique blacklisted IDs: ${BLACKLISTED_DISCORD_USERS.length}`);
-
     } catch (error) {
         console.error('❌ Critical error scanning text directories:', error.message);
     }
 }
 
-// Register secure Global Slash Commands (100% English API definitions)
 client.once('ready', async () => {
     console.log(`🤖 Global Security Shield is active as ${client.user.tag}!`);
     loadLocalTextBlacklists();
@@ -119,8 +126,8 @@ client.once('ready', async () => {
                     {
                         name: 'code',
                         description: 'Enter the exact text from your image (leave blank to request a new image / refresh)',
-                        type: 3, // STRING Option Type
-                        required: false // Changing this to false enables on-demand generation & refreshing!
+                        type: 3, 
+                        required: false 
                     }
                 ]
             }
@@ -131,7 +138,7 @@ client.once('ready', async () => {
             commandData,
             { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        console.log('✅ Global slash commands synchronized successfully with dynamic optional structures!');
+        console.log('✅ Global slash commands synchronized successfully!');
     } catch (error) {
         console.error('❌ API Command registration failed:', error.message);
     }
@@ -139,9 +146,7 @@ client.once('ready', async () => {
 
 function getRobloxUsername(member) {
     const customStatus = member.presence?.activities?.find(a => a.type === 4); 
-    if (customStatus && customStatus.state) {
-        return customStatus.state.trim();
-    }
+    if (customStatus && customStatus.state) return customStatus.state.trim();
     return member.user.username;
 }
 
@@ -149,11 +154,14 @@ function getRobloxUsername(member) {
 async function generateAndSaveCaptcha(userId) {
     const captcha = new Captcha();
     captcha.async = true;
+    
+    // Force the captcha canvas to use our freshly registered Linux font!
+    captcha.font = 'CaptchaCustomFont'; 
+    
     captcha.addDecoy(); 
     captcha.drawTrace(); 
     captcha.drawCaptcha();
 
-    // Store/Overwrite code in cache for dynamic refreshing
     userCaptchas.set(userId, captcha.text);
     return new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
 }
@@ -205,20 +213,17 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
 
         if (targetChannel && !isBulkScan) {
             const unverifiedRole = member.guild.roles.cache.get(ROL_UNVERIFIED_ID);
-            if (unverifiedRole) {
-                await member.roles.add(unverifiedRole).catch(() => null);
-            }
+            if (unverifiedRole) await member.roles.add(unverifiedRole).catch(() => null);
 
             const attachment = await generateAndSaveCaptcha(member.id);
 
             await targetChannel.send({
-                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access. If you cannot read the text, type \`/verify\` without any arguments to generate a fresh image!`,
+                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access. If you cannot read the text, type \`/verify\` without any arguments to generate a fresh image!`,
                 files: [attachment]
             }).catch(() => null);
         }
 
         return { status: 'safe' };
-
     } catch (error) {
         console.error("Security routine error:", error);
         return { status: 'error' };
@@ -236,7 +241,7 @@ client.on('guildMemberAdd', async (member) => {
         LOCKDOWN_MODE = true;
         let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === ChannelType.GuildText);
         if (targetChannel) {
-            await targetChannel.send(`🚨 **Automated Anti-Raid System Activated!** A burst of malicious joins has been detected. Server entries are now under **LOCKDOWN** status.`).catch(() => null);
+            await targetChannel.send(`🚨 **Automated Anti-Raid System Activated!** Server entries are now under **LOCKDOWN** status.`).catch(() => null);
         }
     }
 
@@ -249,12 +254,11 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
     try {
-        // 1. THE REVOLUTIONARY /verify SLASH COMMAND (Handles Submission + Generation + Refreshing)
         if (interaction.commandName === 'verify') {
             const codIntrodus = interaction.options.getString('code');
             const userId = interaction.user.id;
 
-            // DYNAMIC REFRESH MECHANIC: If no code is supplied, create or refresh the image!
+            // DYNAMIC REFRESH MECHANIC
             if (!codIntrodus) {
                 await interaction.deferReply({ ephemeral: true });
                 const attachment = await generateAndSaveCaptcha(userId);
@@ -265,7 +269,6 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
 
-            // SUBMISSION SUB-ROUTINE: If code is supplied, check accuracy
             if (!userCaptchas.has(userId)) {
                 return interaction.reply({ content: '❌ Error: You do not have an active security image. Type \`/verify\` without any letters to generate one.', ephemeral: true });
             }
@@ -273,7 +276,7 @@ client.on('interactionCreate', async (interaction) => {
             const codCorect = userCaptchas.get(userId);
 
             if (codIntrodus.toUpperCase() === codCorect.toUpperCase()) {
-                userCaptchas.delete(userId); // Clear challenge map securely
+                userCaptchas.delete(userId); 
 
                 const unverifiedRole = interaction.guild.roles.cache.get(ROL_UNVERIFIED_ID);
                 const verifiedRole = interaction.guild.roles.cache.get(ROL_VERIFIED_ID);
@@ -287,12 +290,10 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // ADMINISTRATIVE CHECK
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
+            return interaction.reply({ content: '❌ Access Denied: Administrator permission required.', ephemeral: true });
         }
 
-        // 2. THE /scan ROUTINE
         if (interaction.commandName === 'scan') {
             await interaction.deferReply();
             loadLocalTextBlacklists();
@@ -308,18 +309,17 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Malicious Accounts Purged (Blacklist/Roblox): ${bannedCount}`);
         }
 
-        // 3. THE /lockdown ROUTINE
         if (interaction.commandName === 'lockdown') {
             LOCKDOWN_MODE = !LOCKDOWN_MODE;
-            return interaction.reply(`🚨 **Emergency LOCKDOWN Status** has been changed to: **${LOCKDOWN_MODE ? 'ENABLED (New joins will be instantly kicked)' : 'DISABLED (Server returned to normal behavior)'}**.`);
+            return interaction.reply(`🚨 **Emergency LOCKDOWN Status** has been changed to: **${LOCKDOWN_MODE ? 'ENABLED' : 'DISABLED'}**.`);
         }
 
     } catch (error) {
         console.error('🔴 Critical Interaction Error Caught:', error);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '❌ An internal processing error occurred while executing this command.', ephemeral: true }).catch(() => null);
+            await interaction.reply({ content: '❌ An internal processing error occurred.', ephemeral: true }).catch(() => null);
         } else if (interaction.deferred) {
-            await interaction.editReply({ content: '❌ An internal processing error occurred while executing this command.' }).catch(() => null);
+            await interaction.editReply({ content: '❌ An internal processing error occurred.' }).catch(() => null);
         }
     }
 });
