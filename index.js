@@ -1,18 +1,18 @@
-// 1. Încărcăm variabilele de mediu (.env) primele pentru siguranță
+// 1. Load environment variables first for security
 require('dotenv').config();
 
-// 2. Serverul web HTTP cerut de Render pentru a preveni eroarea de "Timeout"
+// 2. HTTP Server required by Render to prevent "Port Timeout" errors
 const http = require('http');
 const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Scut Global Ultra-Securizat (Anti-Raid + Canvas CAPTCHA Grafic) Online!\n');
+   res.end('Global Security Shield (Anti-Raid + Canvas CAPTCHA) Online!\n');
 }).listen(port, () => {
-   console.log(`[RENDER] Serverul ruleaza pe portul ${port}.`);
+   console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
 
-// 3. Importurile complete din Discord, Captcha-Canvas, Axios și FS
+// 3. Import required modules from discord.js, captcha-canvas, axios, and fs
 const { 
     Client, 
     ChannelType,
@@ -26,25 +26,25 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
-// Activăm structura completă de Intents (inclusiv pentru citirea statusurilor membrilor)
+// Enable full client intents including guild member presence status
 const client = new Client({
     intents: [1, 2, 512, 256] // Guilds, GuildMembers, GuildMessages, GuildPresences
 });
 
-// 🛡️ CONFIGURARE ROLURI PENTRU ACCES (Pune ID-urile reale din serverul tău aici)
-const ROL_UNVERIFIED_ID = 'ID_ROL_NEVERIFICAT'; // Rol restrictiv primit la intrare
-const ROL_VERIFIED_ID = 'ID_ROL_VERIFICAT';     // Rolul general de acces primit după CAPTCHA
+// 🛡️ SECURITY CONFIGURATION (Replace with your actual Discord Server Role IDs)
+const ROL_UNVERIFIED_ID = 'ID_ROL_NEVERIFICAT'; // Restrictive role given upon joining
+const ROL_VERIFIED_ID = 'ID_ROL_VERIFICAT';     // Main access member role given after CAPTCHA
 
-// Dicționar în memorie pentru a salva codurile CAPTCHA generate (User ID -> Text Cod)
+// Memory cache to map active CAPTCHAs (User ID -> Generated Code Text)
 const userCaptchas = new Map();
 
-// 🛑 SISTEM AUTOMAT ANTI-RAID (Protecție Crypto/NFT/Twitch)
+// 🛑 AUTOMATED ANTI-RAID SYSTEM (Protection for Crypto/NFT/Twitch servers)
 let joinLog = []; 
 const RAID_THRESHOLD = 5; 
 const RAID_INTERVAL = 3000; 
 let LOCKDOWN_MODE = false; 
 
-// 🛡️ Baza ta de date fixă cu ID-uri Condo de pe ROBLOX
+// 🛡️ Roblox Condo Groups Blacklist
 const BLACKLISTED_ROBLOX_GROUPS = [
     33245612, 16482991, 15900234, 32441109, 17234901, 11400562, 34001922,
     15501928, 32991023, 12004958, 16772019, 33110294, 14920193, 11002938,
@@ -53,7 +53,7 @@ const BLACKLISTED_ROBLOX_GROUPS = [
     1234567, 89101112, 5544332, 9988776, 4455667, 2233445, 7766554, 1122334
 ]; 
 
-// Memorie cache dinamică pentru ID-urile de Discord extrase din fișierele tale .txt
+// Dynamic memory cache for local text database (.txt files)
 let BLACKLISTED_DISCORD_USERS = [];
 
 function loadLocalTextBlacklists() {
@@ -64,7 +64,7 @@ function loadLocalTextBlacklists() {
         const txtFiles = files.filter(file => path.extname(file).toLowerCase() === '.txt');
         
         if (txtFiles.length === 0) {
-            console.log('⚠️ Nu s-a găsit niciun fișier .txt în folderul principal.');
+            console.log('⚠️ No local .txt database files found in the directory.');
             return;
         }
 
@@ -78,43 +78,43 @@ function loadLocalTextBlacklists() {
                 
                 tempIds = tempIds.concat(lines);
             } catch (err) {
-                console.error(`❌ Eroare la citirea fișierului ${fileName}:`, err.message);
+                console.error(`❌ Error reading database file ${fileName}:`, err.message);
             }
         });
 
         BLACKLISTED_DISCORD_USERS = [...new Set(tempIds)];
-        console.log(`✅ [SINC] Încărcare completă! Total ID-uri Discord unice: ${BLACKLISTED_DISCORD_USERS.length}`);
+        console.log(`✅ [SYNC] Database loaded successfully! Total unique blacklisted IDs: ${BLACKLISTED_DISCORD_USERS.length}`);
 
     } catch (error) {
-        console.error('❌ Eroare gravă la scanarea directoarelor:', error.message);
+        console.error('❌ Critical error scanning text directories:', error.message);
     }
 }
 
-// Înregistrarea securizată a tuturor comenzilor Slash globale (Scurtate sub limită)
+// Register secure Global Slash Commands (100% English API definitions)
 client.once('ready', async () => {
-    console.log(`🤖 Scutul Global Integrat este activ ca ${client.user.tag}!`);
+    console.log(`🤖 Global Security Shield is active as ${client.user.tag}!`);
     loadLocalTextBlacklists();
 
     try {
         const appId = client.application?.id || client.user?.id;
-        if (!appId) throw new Error("ID-ul aplicatiei indisponibil.");
+        if (!appId) throw new Error("Application ID is unavailable.");
 
         const commandData = [
             {
                 name: 'scan',
-                description: 'Scaneaza serverul folosind listele Roblox si ID-urile din fisierele text.'
+                description: 'Scan the server using Roblox databases and local blacklist text files.'
             },
             {
                 name: 'lockdown',
-                description: 'Activeaza/Dezactiveaza manual protectia totala impotriva raidurilor masive.'
+                description: 'Toggle total anti-raid lockdown mode for emergency protection.'
             },
             {
-                name: 'verifica',
-                description: 'Introdu codul CAPTCHA primit din imagine pentru deblocarea contului.',
+                name: 'verify',
+                description: 'Enter the code from the generated image to unlock your account.',
                 options: [
                     {
-                        name: 'cod',
-                        description: 'Introdu exact codul text gasit in imaginea generata',
+                        name: 'code',
+                        description: 'Enter the exact text found in the verification image',
                         type: 3, // STRING
                         required: true
                     }
@@ -127,9 +127,9 @@ client.once('ready', async () => {
             commandData,
             { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        console.log('✅ Toate comenzile globale (/scan, /lockdown, /verifica) au fost înregistrate cu succes!');
+        console.log('✅ Global slash commands (/scan, /lockdown, /verify) successfully synchronized with Discord API!');
     } catch (error) {
-        console.error('❌ Eroare la înregistrarea API:', error.message);
+        console.error('❌ API Command registration failed:', error.message);
     }
 });
 
@@ -141,23 +141,23 @@ function getRobloxUsername(member) {
     return member.user.username;
 }
 
-// Verificare securitate + Generare CAPTCHA Canvas Grafic obligatoriu pentru toți oamenii
+// Comprehensive Security Check + Graphical Canvas CAPTCHA System (ALL IN ENGLISH)
 async function performIndependentSecurityCheck(member, targetChannel = null, isBulkScan = false) {
     try {
         if (LOCKDOWN_MODE && !isBulkScan) {
-            await member.send(`🚨 Serverul este securizat sub regim LOCKDOWN din cauza unui raid. Incearca mai tarziu.`).catch(() => null);
-            await member.kick('Sistem Automat Anti-Raid: Server în Lockdown.').catch(() => null);
+            await member.send(`🚨 This server is currently under emergency LOCKDOWN due to a cyber attack / raid. Please try again later.`).catch(() => null);
+            await member.kick('Automated Anti-Raid: Server in Lockdown mode.').catch(() => null);
             return { status: 'banned', source: 'Anti-Raid' };
         }
 
-        // 1. VERIFICARE FIȘIERE TEXT (.TXT)
+        // 1. LOCAL BLACKLIST DATABASE TEXT SCAN (.TXT)
         if (BLACKLISTED_DISCORD_USERS.includes(member.id)) {
-            await member.send(`⚠️ Ai fost banat automat. Motiv: Bază de date Blacklist locală.`).catch(() => null);
-            await member.ban({ reason: 'Securitate Automată: ID listat în fișierele text.' }).catch(() => null);
+            await member.send(`⚠️ You have been automatically banned. Reason: Flagged in Global Security Blacklist Database.`).catch(() => null);
+            await member.ban({ reason: 'Automated Security: Listed in blacklist text files.' }).catch(() => null);
             return { status: 'banned', source: 'Discord' };
         }
 
-        // 2. VERIFICARE ROBLOX CONDO GROUPS
+        // 2. ROBLOX CONDO GROUPS SECURE CHECK
         const robloxUsername = getRobloxUsername(member);
         const userResponse = await axios.post('https://users.roblox.com/v1/usernames/users', {
             usernames: [robloxUsername],
@@ -182,36 +182,36 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
                 }
 
                 if (isInCondo) {
-                    await member.send(`⚠️ Ai fost eliminat automat deoarece ești membru în grupul Condo: ${flaggedGroupName}`).catch(() => null);
-                    await member.ban({ reason: `Securitate Roblox: Grupul virusat (${flaggedGroupName})` }).catch(() => null);
+                    await member.send(`⚠️ You have been automatically banned for being a member of a flagged malicious group: ${flaggedGroupName}`).catch(() => null);
+                    await member.ban({ reason: `Roblox Security: Flagged group association (${flaggedGroupName})` }).catch(() => null);
                     return { status: 'banned', source: 'Roblox', reason: flaggedGroupName };
                 }
             }
         }
 
-        // 3. GENERARE CAPTCHA CANVAS GRAFIC (Pentru toți oamenii, inclusiv Admini la intrare)
+        // 3. GRAPHICAL CANVAS CAPTCHA EMISSION FOR HUMAN ACCOUNTS (ALL IN ENGLISH)
         if (targetChannel && !isBulkScan) {
             const unverifiedRole = member.guild.roles.cache.get(ROL_UNVERIFIED_ID);
             if (unverifiedRole) {
                 await member.roles.add(unverifiedRole).catch(() => null);
             }
 
-            // Inițializăm și configurăm imaginea securizată cu pachetul captcha-canvas
+            // Generate secure anti-bot image using captcha-canvas
             const captcha = new Captcha();
             captcha.async = true;
-            captcha.addDecoy(); // Linii de fundal anti-boți
-            captcha.drawTrace(); // Amprentă de zgomot grafic
+            captcha.addDecoy(); 
+            captcha.drawTrace(); 
             captcha.drawCaptcha();
 
-            // Salvăm stringul generat în Map-ul nostru securizat (User ID -> Textul corect)
+            // Save text in cache map (User ID -> Solution)
             userCaptchas.set(member.id, captcha.text);
 
-            // Convertim bufferul imaginii într-un fișier atașat de Discord
+            // Convert buffer to file attachment
             const attachment = new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
 
-            // Trimitem imaginea direct pe canalul de înregistrare al serverului
+            // Send notification inside the verification channel
             await targetChannel.send({
-                content: `🛡️ **Sistem Global Anti-Bot & Anti-Hijack**\nBun venit ${member}! Toate conturile (utilizatori, moderatori și administratori) trebuie să completeze verificarea vizuală pentru a debloca serverul.\n\n✍️ **Instrucțiuni:** Privește imaginea de mai jos și folosește comanda globală \`/verifica\` urmată de codul corect.`,
+                content: `🛡️ **Global Security Verification (Anti-Bot & Anti-Hijack)**\nWelcome ${member}! To protect this community from automated phishing attacks and raids, all accounts must complete this quick visual test.\n\n✍️ **Instructions:** Look at the image below and use the command \`/verify\` followed by the correct code to gain access.`,
                 files: [attachment]
             }).catch(() => null);
         }
@@ -219,14 +219,14 @@ async function performIndependentSecurityCheck(member, targetChannel = null, isB
         return { status: 'safe' };
 
     } catch (error) {
-        console.error("Eroare la procesarea securitatii:", error);
+        console.error("Security routine error:", error);
         return { status: 'error' };
     }
 }
 
-// 📥 EVENIMENT: Detecție Automated Raids la intrarea membrilor umani
+// 📥 EVENT: Anti-Raid Burst Detection on User Join
 client.on('guildMemberAdd', async (member) => {
-    if (member.user.bot) return; // Ignorăm complet boții autorizați
+    if (member.user.bot) return; // Skip authorized application bots
 
     const now = Date.now();
     joinLog.push(now);
@@ -236,7 +236,7 @@ client.on('guildMemberAdd', async (member) => {
         LOCKDOWN_MODE = true;
         let targetChannel = member.guild.systemChannel || member.guild.channels.cache.find(c => c.type === ChannelType.GuildText);
         if (targetChannel) {
-            await targetChannel.send(`🚨 **Sistemul a activat LOCKDOWN!** Detectat un posibil raid masiv de boți. Porțile serverului sunt închise.`);
+            await targetChannel.send(`🚨 **Automated Anti-Raid System Activated!** A burst of malicious joins has been detected. Server entries are now under **LOCKDOWN** status.`).catch(() => null);
         }
     }
 
@@ -244,56 +244,55 @@ client.on('guildMemberAdd', async (member) => {
     await performIndependentSecurityCheck(member, targetChannel, false);
 });
 
-// 🚀 EVENIMENT: Interacțiuni (Comenzi Slash complete)
+// 🚀 EVENT: Interactions Process (Commands & Interfaces 100% English)
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand?.() && !interaction.isCommand?.()) return;
 
-    // 1. PROTOCOLUL /verifica (Răspunsul la CAPTCHA grafic)
-    if (interaction.commandName === 'verifica') {
-        const codIntrodus = interaction.options.getString('cod');
+    // 1. THE MAIN /verify SLASH COMMAND HANDLER
+    if (interaction.commandName === 'verify') {
+        const codIntrodus = interaction.options.getString('code');
         const userId = interaction.user.id;
 
-        // Verificăm dacă userul are un cod activ alocat în cache
+        // Check if user has a pending CAPTCHA challenge
         if (!userCaptchas.has(userId)) {
-            return interaction.reply({ content: '❌ Nu deții un test CAPTCHA activ de rezolvat pe acest server.', ephemeral: true });
+            return interaction.reply({ content: '❌ You do not have an active security challenge to solve on this server.', ephemeral: true });
         }
 
         const codCorect = userCaptchas.get(userId);
 
-        // Verificare Case-Insensitive (Nu contează literele mari/mici)
+        // Case-Insensitive evaluation
         if (codIntrodus.toUpperCase() === codCorect.toUpperCase()) {
-            userCaptchas.delete(userId); // Curățăm cache-ul din memorie pentru siguranță
+            userCaptchas.delete(userId); // Clear memory cache
 
             try {
                 const unverifiedRole = interaction.guild.roles.cache.get(ROL_UNVERIFIED_ID);
                 const verifiedRole = interaction.guild.roles.cache.get(ROL_VERIFIED_ID);
 
-                // Schimbăm rolurile securizat (.catch previne erori dacă userul e admin nativ)
                 if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole).catch(() => null);
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
 
-                return interaction.reply({ content: '✅ Verificare reușită! Identitatea ta a fost confirmată. Ai primit acces pe server.', ephemeral: true });
+                return interaction.reply({ content: '✅ Verification successful! Your account has been authenticated. Welcome to the server!', ephemeral: true });
             } catch (err) {
-                return interaction.reply({ content: '❌ Eroare de ierarhie la alocarea rolului. Contactează de urgență un Admin.', ephemeral: true });
+                return interaction.reply({ content: '❌ Hierarchy Error: The bot cannot manage your server roles. Please notify an Administrator.', ephemeral: true });
             }
         } else {
-            return interaction.reply({ content: '❌ Cod incorect! Privește cu atenție imaginea și reîncearcă comanda \`/verifica\`.', ephemeral: true });
+            return interaction.reply({ content: '❌ Invalid code! Please read the image carefully and try the \`/verify\` command again.', ephemeral: true });
         }
     }
 
-    // VERIFICARE PERMISIUNI ADMINISTRATIVE PENTRU /scan ȘI /lockdown
+    // CHECK PERMISSIONS FOR ADMINISTRATIVE SYSTEMS
     if (!interaction.member.permissions.has('ADMINISTRATOR')) {
-        return interaction.reply({ content: '❌ Doar un Administrator autorizat poate rula această comandă de control.', ephemeral: true });
+        return interaction.reply({ content: '❌ Access Denied: Administrator permission is required to execute this command.', ephemeral: true });
     }
 
-    // 2. PROTOCOLUL /scan
+    // 2. THE /scan ROUTINE
     if (interaction.commandName === 'scan') {
         await interaction.deferReply();
         loadLocalTextBlacklists();
         const members = await interaction.guild.members.fetch();
         let safeCount = 0, bannedCount = 0;
 
-        await interaction.editReply(`🔄 Se execută scanarea structurală pe ${members.size} conturi active...`);
+        await interaction.editReply(`🔄 Executing mass security scan across ${members.size} active members...`);
 
         for (const [id, member] of members) {
             if (member.user.bot) continue;
@@ -301,13 +300,13 @@ client.on('interactionCreate', async (interaction) => {
             if (result.status === 'safe') safeCount++;
             else if (result.status === 'banned') bannedCount++;
         }
-        await interaction.editReply(`📊 **Scanare structurală completă!**\n✅ Conturi sigure: ${safeCount}\n🔨 Eliminări automate din baza de date: ${bannedCount}`);
+        await interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Malicious Accounts Purged (Blacklist/Roblox): ${bannedCount}`);
     }
 
-    // 3. PROTOCOLUL /lockdown
+    // 3. THE /lockdown ROUTINE
     if (interaction.commandName === 'lockdown') {
         LOCKDOWN_MODE = !LOCKDOWN_MODE;
-        return interaction.reply(`🚨 **Regimul LOCKDOWN** a fost setat pe: **${LOCKDOWN_MODE ? 'ACTIVAT (Membrii noi primesc kick instant)' : 'DEZACTIVAT (Serverul funcționează normal)'}**.`);
+        return interaction.reply(`🚨 **Emergency LOCKDOWN Status** has been changed to: **${LOCKDOWN_MODE ? 'ENABLED (New joins will be instantly kicked)' : 'DISABLED (Server returned to normal behavior)'}**.`);
     }
 });
 
