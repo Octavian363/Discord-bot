@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Mobile Voice Fix + Dynamic Visibility) Online!\n');
+   res.end('Global Security Shield (Strict Double-Lock Enforcement) Online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
@@ -69,7 +69,7 @@ function createVerificationModal() {
 
 // 🌐 AUTOMATIC SLASH COMMAND SYNC
 client.once('ready', async () => {
-    console.log(`🤖 Bot ${client.user.tag} is running with hidden-channel logic!`);
+    console.log(`🤖 Bot ${client.user.tag} is running with hidden-channel logic and strict text block!`);
 
     try {
         const appId = client.application?.id || client.user?.id;
@@ -127,7 +127,7 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Role deployment failed.' });
         }
 
-        // C. Configurare canal #verify: ascuns COMPLET pentru Verified și @everyone, vizibil DOAR pentru UnVerified
+        // C. Configurare canal #verify
         let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
         if (!verifyChannel) {
             verifyChannel = await guild.channels.create({
@@ -136,16 +136,16 @@ client.on('interactionCreate', async (interaction) => {
                 permissionOverwrites: [
                     {
                         id: guild.roles.everyone.id,
-                        deny: [PermissionFlagsBits.ViewChannel]
+                        deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
                     },
                     {
                         id: unverifiedRole.id,
                         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-                        deny: [PermissionFlagsBits.SendMessages]
+                        deny: [PermissionFlagsBits.SendMessages] // Blocat complet scrisul pe canalul de verify!
                     },
                     {
                         id: verifiedRole.id,
-                        deny: [PermissionFlagsBits.ViewChannel] // Când primesc rolul Verified, canalul DISPARE complet pentru ei!
+                        deny: [PermissionFlagsBits.ViewChannel] 
                     }
                 ]
             }).catch(() => null);
@@ -155,24 +155,25 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Error: Failed to generate verification channel.' });
         }
 
-        // D. BLOCARE TOTALĂ CANALE PENTRU UTILIZATORII MOBILI ȘI TELEFOANE
+        // D. BLOCARE TOTALĂ EXPLICITĂ: FĂRĂ VIZUALIZARE ȘI FĂRĂ SCRIS (TEXT + VOCAL)
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
             
             try {
                 if (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice) {
-                    // Nimeni fără rol nu poate intra sau vorbi pe mobil/desktop
                     await channel.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: false, Speak: false, ViewChannel: false });
                     await channel.permissionOverwrites.edit(unverifiedRole.id, { Connect: false, Speak: false, ViewChannel: false });
                     await channel.permissionOverwrites.edit(verifiedRole.id, { Connect: true, Speak: true, ViewChannel: true });
                 } else {
-                    // Canalele text devin invizibile pentru cei neverificați
-                    await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false });
-                    await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false });
+                    // Schimbat aici: Blochează explicit ViewChannel și SendMessages pentru a opri complet scrisul!
+                    await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, SendMessages: false });
+                    await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, SendMessages: false });
                     await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, SendMessages: true });
                 }
-            } catch (err) {}
+            } catch (err) {
+                console.error(`[ERROR] Failed to set strict overrides for ${channel.name}:`, err.message);
+            }
         }
 
         const row = new ActionRowBuilder().addComponents(
@@ -184,14 +185,13 @@ client.on('interactionCreate', async (interaction) => {
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! Mobile and Hide-On-Success filters are now active.**` });
+        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! Unverified users are now explicitly blocked from typing and joining voice channels.**` });
     }
 
     // ==========================================
     // 2. GET CODE BUTTON TRIGGER
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
-        // Dacă utilizatorul are deja rolul Verified, nu îl lăsăm să ruleze codul
         if (interaction.member.roles.cache.some(r => r.name === 'Verified')) {
             return interaction.reply({ content: '✅ You are already fully verified!', ephemeral: true });
         }
@@ -277,7 +277,6 @@ client.on('interactionCreate', async (interaction) => {
             const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
             const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
 
-            // Oferim accesul complet și eliminăm rolul restrictiv
             if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole).catch(() => null);
             if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
 
