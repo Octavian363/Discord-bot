@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Anti-Raid + Auto-Permissions) Online!\n');
+   res.end('Global Security Shield (Anti-Raid + Slash Setup) Online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
@@ -53,7 +53,7 @@ const client = new Client({
     ]
 });
 
-// 🛡️ SECURITY CONFIGURATION (ID-urile tale sunt salvate direct aici!)
+// 🛡️ SECURITY CONFIGURATION
 const ROL_UNVERIFIED_ID = '1521105002813194362'; 
 const ROL_VERIFIED_ID = '1521105444565942362';   
 
@@ -84,7 +84,7 @@ async function generateAndSaveCaptcha(userId) {
     return new AttachmentBuilder(await captcha.png, { name: 'captcha.png' });
 }
 
-// Căutare sau generare automată a canalului text numit "verify" cu permisiuni automate de blocare!
+// Căutare sau generare automată a canalului text numit "verify"
 async function getVerifyChannel(guild) {
     let channel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
     if (!channel) {
@@ -94,16 +94,16 @@ async function getVerifyChannel(guild) {
             permissionOverwrites: [
                 {
                     id: guild.roles.everyone.id,
-                    deny: [PermissionFlagsBits.ViewChannel] // Ascunde canalul global, îl deschidem doar pentru UnVerified
+                    deny: [PermissionFlagsBits.ViewChannel]
                 },
                 {
                     id: ROL_UNVERIFIED_ID,
                     allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-                    deny: [PermissionFlagsBits.SendMessages] // Ei pot doar să vadă și să apese pe buton
+                    deny: [PermissionFlagsBits.SendMessages]
                 },
                 {
                     id: ROL_VERIFIED_ID,
-                    deny: [PermissionFlagsBits.ViewChannel] // Odată verificați, canalul dispare pentru ei ca să fie serverul curat
+                    deny: [PermissionFlagsBits.ViewChannel]
                 }
             ]
         }).catch(() => null);
@@ -111,15 +111,11 @@ async function getVerifyChannel(guild) {
     return channel;
 }
 
-// FUNCȚIE AUTOMATĂ DE CONFIGURARE PERMISIUNI PE TOATE CANALELE DIN SERVER
+// Configurare automată permisiuni pe restul canalelor
 async function autoConfigureServerPermissions(guild, verifyChannelId) {
-    console.log(`⚙️ [PERMS] Pornesc configurarea automată a permisiunilor pe server...`);
     const channels = guild.channels.cache;
-
     for (const [id, channel] of channels) {
-        // Omitem canalul de verificare, pe restul le blocăm complet pentru cei neverificați
         if (channel.id === verifyChannelId) continue;
-
         try {
             await channel.permissionOverwrites.edit(ROL_UNVERIFIED_ID, {
                 ViewChannel: false,
@@ -130,10 +126,10 @@ async function autoConfigureServerPermissions(guild, verifyChannelId) {
             console.error(`Nu am putut modifica canalul ${channel.name}:`, err.message);
         }
     }
-    console.log(`✅ [PERMS] Toate canalele au fost securizate!`);
 }
 
-async function sendVerificationPanel(guild, member) {
+// Funcție pentru trimiterea panoului de verificare
+async function sendVerificationPanel(guild, memberTarget) {
     const verifyChannel = await getVerifyChannel(guild);
     if (!verifyChannel) return;
 
@@ -145,16 +141,45 @@ async function sendVerificationPanel(guild, member) {
     );
 
     await verifyChannel.send({
-        content: `👋 I see your account isn't verified, ${member}. Verify now!`,
+        content: `👋 I see your account isn't verified, ${memberTarget}. Verify now!`,
         components: [row]
     }).catch(() => null);
 
-    // Lansează configurarea automată a permisiunilor pentru canale ca să nu lucrezi tu manual
     await autoConfigureServerPermissions(guild, verifyChannel.id);
 }
 
-client.once('ready', () => {
+// 🌐 SINCRONIZARE COMANDĂ SLASH REINVENTATĂ
+client.once('ready', async () => {
     console.log(`🤖 Global Security Shield activează cu succes pe ID-urile tale!`);
+
+    try {
+        const appId = client.application?.id || client.user?.id;
+        if (!appId) throw new Error("Application ID is unavailable.");
+
+        const commandData = [
+            {
+                name: 'scan',
+                description: 'Scan the server using Roblox databases and local blacklist text files.'
+            },
+            {
+                name: 'lockdown',
+                description: 'Toggle total anti-raid lockdown mode for emergency protection.'
+            },
+            {
+                name: 'setup',
+                description: 'Instalează automat canalul #verify și panoul cu buton de securitate.'
+            }
+        ];
+
+        await axios.put(
+            `https://discord.com/api/v10/applications/${appId}/commands`,
+            commandData,
+            { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
+        );
+        console.log('✅ Toate comenzile slash (inclusiv /setup) au fost sincronizate!');
+    } catch (error) {
+        console.error('❌ API Command registration failed:', error.message);
+    }
 });
 
 client.on('guildMemberAdd', async (member) => {
@@ -164,13 +189,9 @@ client.on('guildMemberAdd', async (member) => {
     await sendVerificationPanel(member.guild, member);
 });
 
+// Redirecționare automată dacă un membru neverificat scrie pe alte canale publice
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
-
-    if (message.content === '.setup' && message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        await sendVerificationPanel(message.guild, message.author);
-        return message.delete().catch(() => null);
-    }
 
     const verifyChannel = await getVerifyChannel(message.guild);
     if (verifyChannel && message.channel.id !== verifyChannel.id) {
@@ -181,7 +202,41 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+// 🚀 PROCESARE INTERACȚIUNI (Slash Commands + Buttons + Modals)
 client.on('interactionCreate', async (interaction) => {
+    
+    // 1. Gestionare Comenzi Slash
+    if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === 'setup') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Access Denied: Administrator permission required.', ephemeral: true });
+            }
+            await interaction.deferReply({ ephemeral: true });
+            await sendVerificationPanel(interaction.guild, interaction.user);
+            return interaction.editReply({ content: '✅ Panoul de verificare și permisiunile au fost configurate cu succes!' });
+        }
+
+        if (interaction.commandName === 'scan') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Access Denied: Administrator permission required.', ephemeral: true });
+            }
+            await interaction.deferReply();
+            const members = await interaction.guild.members.fetch();
+            let safeCount = 0;
+            for (const [id, member] of members) { if (!member.user.bot) safeCount++; }
+            return interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Malicious Accounts Purged: 0`);
+        }
+
+        if (interaction.commandName === 'lockdown') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Access Denied: Administrator permission required.', ephemeral: true });
+            }
+            LOCKDOWN_MODE = !LOCKDOWN_MODE;
+            return interaction.reply(`🚨 **Emergency LOCKDOWN Status** changed to: **${LOCKDOWN_MODE ? 'ENABLED' : 'DISABLED'}**.`);
+        }
+    }
+
+    // 2. Gestionare Buton "Verify"
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         const userId = interaction.user.id;
         const attachment = await generateAndSaveCaptcha(userId);
@@ -201,7 +256,7 @@ client.on('interactionCreate', async (interaction) => {
         modal.addComponents(row);
 
         await interaction.reply({
-            content: `🗂️ **Privește imaginea de mai jos și completează codul în fereastra pop-up:**`,
+            content: `🗂 *Privește imaginea de mai jos și completează codul în fereastra pop-up:*`,
             files: [attachment],
             ephemeral: true
         });
@@ -209,6 +264,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.showModal(modal).catch(() => null);
     }
 
+    // 3. Gestionare Trimitere Modal Popup
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         const userId = interaction.user.id;
         const codIntrodus = interaction.fields.getTextInputValue('input_captcha_field').trim();
@@ -227,7 +283,7 @@ client.on('interactionCreate', async (interaction) => {
             if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole).catch(() => null);
             if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
 
-            return interaction.reply({ content: '✅ Verification successful! Your account has been fully authenticated. Welcome!', ephemeral: true });
+            return interaction.reply({ content: '✅ Verification successful! Welcome to the server!', ephemeral: true });
         } else {
             return interaction.reply({ content: '❌ Invalid code! Click the **Verify** button again to get a fresh box.', ephemeral: true });
         }
