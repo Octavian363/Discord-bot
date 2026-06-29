@@ -41,15 +41,17 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false; // Controls the auto-kick feature
 
-// Generates a random secure code
+// Fixat: Generare curată a codului fără caractere care blochează textul
 function generateSecureCode(userId) {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Excluded confusing characters like O, 0, I, 1
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
     for (let i = 0; i < 5; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     userCaptchas.set(userId, code);
-    return `\`\`\`\n      ${code.split('').join('  ')}      \n\`\`\``;
+    
+    // Format simplu și sigur în interiorul blocului de cod, garantat va arăta toate cele 5 litere
+    return `\`\`\`\nCODE: ${code}\n\`\`\``;
 }
 
 // Global function to build the code input modal window
@@ -118,7 +120,6 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
         const guild = interaction.guild;
 
-        // A. Find or create UnVerified role
         let unverifiedRole = guild.roles.cache.find(r => r.name === 'UnVerified');
         if (!unverifiedRole) {
             unverifiedRole = await guild.roles.create({
@@ -128,7 +129,6 @@ client.on('interactionCreate', async (interaction) => {
             }).catch(() => null);
         }
 
-        // B. Find or create Verified role
         let verifiedRole = guild.roles.cache.find(r => r.name === 'Verified');
         if (!verifiedRole) {
             verifiedRole = await guild.roles.create({
@@ -142,7 +142,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Role deployment failed. Please check the bot hierarchy and permissions!' });
         }
 
-        // C. Find or create #verify text channel
         let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
         if (!verifyChannel) {
             verifyChannel = await guild.channels.create({
@@ -170,11 +169,9 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Error: Failed to generate the verification text channel.' });
         }
 
-        // D. SECURE ALL OTHER CHANNELS (STRICT TEXT & VOICE LOCKDOWN)
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
-            
             try {
                 if (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice) {
                     await channel.permissionOverwrites.edit(unverifiedRole.id, {
@@ -190,12 +187,9 @@ client.on('interactionCreate', async (interaction) => {
                         ReadMessageHistory: false
                     });
                 }
-            } catch (err) {
-                console.error(`Could not lock permissions for channel ${channel.name}:`, err.message);
-            }
+            } catch (err) {}
         }
 
-        // E. Send verification prompt button
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('click_to_verify')
@@ -208,11 +202,11 @@ client.on('interactionCreate', async (interaction) => {
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Automated Security Setup Successful!**\n• **UnVerified** & **Verified** roles are synchronized.\n• Channel <#${verifyChannel.id}> is configured.\n• Total lockout applied: Unverified accounts cannot view text chats or connect/speak in voice channels.` });
+        return interaction.editReply({ content: `✅ **Automated Security Setup Successful!**` });
     }
 
     // ==========================================
-    // 2. GET CODE BUTTON TRIGGER (TRIMITE MESAJUL + BUTONUL SUB EL)
+    // 2. GET CODE BUTTON TRIGGER
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         try {
@@ -226,31 +220,30 @@ client.on('interactionCreate', async (interaction) => {
                     .setStyle(ButtonStyle.Success)
             );
 
-            // Trimitem doar reply-ul privat cu codul și noul buton dedesubt pentru a evita "Interaction Failed"
             return interaction.reply({
                 content: `🔒 **Verification Challenge**\n\nYour security code is listed below:\n${codeDisplay}\nClick the button underneath to submit it. You can also use \`/verify\`.`,
                 components: [row],
                 ephemeral: true
             });
         } catch (error) {
-            console.error('Button click processing error:', error);
-            return interaction.reply({ content: '❌ Internal security handler error. Please try again.', ephemeral: true });
+            console.error(error);
+            return interaction.reply({ content: '❌ Internal security error.', ephemeral: true });
         }
     }
 
     // ==========================================
-    // 3. ENTER THE CODE BUTTON TRIGGER (DESCHIDE MODALUL)
+    // 3. ENTER THE CODE BUTTON TRIGGER
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'trigger_modal_input') {
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
     // ==========================================
-    // 4. /VERIFY SLASH COMMAND (ALTERNATIVE INPUT)
+    // 4. /VERIFY SLASH COMMAND
     // ==========================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'verify') {
         if (!userCaptchas.has(interaction.user.id)) {
-            return interaction.reply({ content: '❌ You haven\'t generated a code yet! Click **Get Code** in the verification channel first.', ephemeral: true });
+            return interaction.reply({ content: '❌ You haven\'t generated a code yet! Click **Get Code** first.', ephemeral: true });
         }
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
@@ -272,16 +265,7 @@ client.on('interactionCreate', async (interaction) => {
                 return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
             }
             LOCKDOWN_MODE = false;
-            return interaction.reply({ content: '🛡️ **Lockdown Disabled.** The server is now open. New accounts can join and complete verification normally.' });
-        }
-
-        if (interaction.commandName === 'scan') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ Permission denied.', ephemeral: true });
-            await interaction.deferReply();
-            const members = await interaction.guild.members.fetch();
-            let safeCount = 0;
-            for (const [id, member] of members) { if (!member.user.bot) safeCount++; }
-            return interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Purged: 0`);
+            return interaction.reply({ content: '🛡️ **Lockdown Disabled.** New accounts can join normally.' });
         }
     }
 
@@ -295,7 +279,7 @@ client.on('interactionCreate', async (interaction) => {
         const correctCode = userCaptchas.get(userId);
 
         if (!correctCode) {
-            return interaction.editReply({ content: '❌ Verification session expired or missing. Please click **Get Code** again.' });
+            return interaction.editReply({ content: '❌ Verification session expired. Please click **Get Code** again.' });
         }
 
         if (enteredCode.toUpperCase() === correctCode.toUpperCase()) {
@@ -307,29 +291,25 @@ client.on('interactionCreate', async (interaction) => {
             if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole).catch(() => null);
             if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
 
-            return interaction.editReply({ content: '✅ Verification successful! Full text and voice access has been unlocked. Welcome!' });
+            return interaction.editReply({ content: '✅ Verification successful! Full access granted.' });
         } else {
-            return interaction.editReply({ content: '❌ Invalid code! Click **Get Code** again to get a fresh challenge.' });
+            return interaction.editReply({ content: '❌ Invalid code! Click **Get Code** again.' });
         }
     }
 });
 
 // ==========================================
-// 7. ANTI-RAID AUTOMATIC KICK ON JOIN
+// 7. ANTI-RAID KICK ON JOIN
 // ==========================================
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return; 
 
-    // If Lockdown is active, kick the user immediately
     if (LOCKDOWN_MODE) {
         try {
-            await member.send(`🚨 **Security Alert:** You have been kicked from **${member.guild.name}** because the server is currently under emergency lockdown. Please try joining again later.`).catch(() => null);
-            await member.kick('Emergency Lockdown Mode Active (Anti-Raid)');
-            console.log(`🔨 [LOCKDOWN] Instantly kicked user: ${member.user.tag}`);
+            await member.send(`🚨 **Security Alert:** You have been kicked from **${member.guild.name}** due to emergency lockdown.`).catch(() => null);
+            await member.kick('Emergency Lockdown Mode Active');
             return;
-        } catch (kickError) {
-            console.error(`Failed to kick user during lockdown: ${kickError.message}`);
-        }
+        } catch (err) {}
     }
 
     const unverifiedRole = member.guild.roles.cache.find(r => r.name === 'UnVerified');
