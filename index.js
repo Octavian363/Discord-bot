@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Strict Double-Lock Enforcement) Online!\n');
+   res.end('Global Security Shield (Strict Hierarchy & Override Enforcement) Online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
@@ -69,14 +69,14 @@ function createVerificationModal() {
 
 // 🌐 AUTOMATIC SLASH COMMAND SYNC
 client.once('ready', async () => {
-    console.log(`🤖 Bot ${client.user.tag} is running with hidden-channel logic and strict text block!`);
+    console.log(`🤖 Bot ${client.user.tag} is online and running in strict English security mode!`);
 
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
             {
                 name: 'setup',
-                description: 'Automatically creates UnVerified/Verified roles and configures hidden channel overrides.'
+                description: 'Automatically creates UnVerified/Verified roles, #verify channel, and secures all permissions.'
             },
             {
                 name: 'verify',
@@ -97,13 +97,13 @@ client.once('ready', async () => {
             commandData,
             { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        console.log('✅ Commands synchronized successfully.');
+        console.log('✅ Slash commands successfully registered to Discord API.');
     } catch (error) {
         console.error('❌ Failed to sync slash commands:', error.message);
     }
 });
 
-// 🚀 CORE INTERACTION HANDLER
+// 🚀 CORE INTERACTION HANDLER (SLASH COMMANDS + BUTTONS + MODALS)
 client.on('interactionCreate', async (interaction) => {
     
     // ==========================================
@@ -124,10 +124,10 @@ client.on('interactionCreate', async (interaction) => {
             await guild.roles.create({ name: 'Verified', color: '#2ecc71' }).catch(() => null);
 
         if (!unverifiedRole || !verifiedRole) {
-            return interaction.editReply({ content: '❌ Role deployment failed.' });
+            return interaction.editReply({ content: '❌ Role deployment failed. Please check permissions.' });
         }
 
-        // C. Configurare canal #verify
+        // C. Deploy highly restricted #verify channel
         let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
         if (!verifyChannel) {
             verifyChannel = await guild.channels.create({
@@ -141,43 +141,47 @@ client.on('interactionCreate', async (interaction) => {
                     {
                         id: unverifiedRole.id,
                         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-                        deny: [PermissionFlagsBits.SendMessages] // Blocat complet scrisul pe canalul de verify!
+                        deny: [PermissionFlagsBits.SendMessages] // Strictly block writing for unverified
                     },
                     {
                         id: verifiedRole.id,
-                        deny: [PermissionFlagsBits.ViewChannel] 
+                        deny: [PermissionFlagsBits.ViewChannel] // Completely hides the channel once verified
                     }
                 ]
             }).catch(() => null);
         }
 
         if (!verifyChannel) {
-            return interaction.editReply({ content: '❌ Error: Failed to generate verification channel.' });
+            return interaction.editReply({ content: '❌ Error: Failed to generate the verification text channel.' });
         }
 
-        // D. BLOCARE TOTALĂ EXPLICITĂ: FĂRĂ VIZUALIZARE ȘI FĂRĂ SCRIS (TEXT + VOCAL)
+        // D. BULLETPROOF LOCKDOWN FOR ALL CHANNELS
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
             
             try {
                 if (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice) {
-                    await channel.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: false, Speak: false, ViewChannel: false });
-                    await channel.permissionOverwrites.edit(unverifiedRole.id, { Connect: false, Speak: false, ViewChannel: false });
-                    await channel.permissionOverwrites.edit(verifiedRole.id, { Connect: true, Speak: true, ViewChannel: true });
+                    // Everyone is blocked by default, Verified is explicitly allowed access
+                    await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, Connect: false, Speak: false });
+                    await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, Connect: false, Speak: false });
+                    await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, Connect: true, Speak: true });
                 } else {
-                    // Schimbat aici: Blochează explicit ViewChannel și SendMessages pentru a opri complet scrisul!
+                    // Hide regular text channels from everyone, only grant viewing and typing to Verified role
                     await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, SendMessages: false });
                     await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, SendMessages: false });
                     await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, SendMessages: true });
                 }
             } catch (err) {
-                console.error(`[ERROR] Failed to set strict overrides for ${channel.name}:`, err.message);
+                console.error(`Could not lock permissions for channel ${channel.name}:`, err.message);
             }
         }
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Get Code').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder()
+                .setCustomId('click_to_verify')
+                .setLabel('Get Code')
+                .setStyle(ButtonStyle.Primary)
         );
 
         await verifyChannel.send({
@@ -185,7 +189,7 @@ client.on('interactionCreate', async (interaction) => {
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! Unverified users are now explicitly blocked from typing and joining voice channels.**` });
+        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! All channels are now dynamically locked based on verification status.**` });
     }
 
     // ==========================================
@@ -201,7 +205,10 @@ client.on('interactionCreate', async (interaction) => {
             const codeDisplay = generateSecureCode(userId);
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter the code').setStyle(ButtonStyle.Success)
+                new ButtonBuilder()
+                    .setCustomId('trigger_modal_input')
+                    .setLabel('Enter the code')
+                    .setStyle(ButtonStyle.Success)
             );
 
             return interaction.reply({
@@ -277,10 +284,16 @@ client.on('interactionCreate', async (interaction) => {
             const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
             const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
 
-            if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole).catch(() => null);
-            if (verifiedRole) await interaction.member.roles.add(verifiedRole).catch(() => null);
-
-            return interaction.editReply({ content: '✅ Verification successful! Full access granted. The verification channel has been hidden from your view.' });
+            try {
+                // Încercăm să modificăm rolurile. Dacă ierarhia e greșită, va pica în blocul catch de mai jos.
+                if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
+                if (verifiedRole) await interaction.member.roles.add(verifiedRole);
+                
+                return interaction.editReply({ content: '✅ Verification successful! Full access granted. The verification channel has been hidden from your view.' });
+            } catch (roleError) {
+                console.error('Role hierarchy error:', roleError);
+                return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** The bot was unable to change your roles. Please ensure the bot\'s role is dragged to the **VERY TOP** of the roles list in Server Settings, above UnVerified and Verified!' });
+            }
         } else {
             return interaction.editReply({ content: '❌ Invalid code! Click **Get Code** again.' });
         }
