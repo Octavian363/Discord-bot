@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Auto Setup Mode) Online!\n');
+   res.end('Global Security Shield (Auto Setup + Font Fixed) Online!\n');
 }).listen(port, () => {
    console.log(`[RENDER] Keep-alive server running on port ${port}.`);
 });
@@ -27,7 +27,23 @@ const {
     TextInputStyle
 } = require('discord.js');
 const { Captcha } = require('captcha-canvas');
+const { registerFont } = require('canvas'); 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+// 🔍 REGISTER LOCAL FONT BEFORE BOT LAUNCH (OBLIGATORIU PENTRU IMAGINE)
+try {
+    const fontPath = path.join(__dirname, 'captcha-font.ttf');
+    if (fs.existsSync(fontPath)) {
+        registerFont(fontPath, { family: 'CaptchaCustomFont' });
+        console.log('✅ [FONT] Custom CAPTCHA font successfully registered!');
+    } else {
+        console.log('⚠️ [FONT] captcha-font.ttf missing, using system defaults.');
+    }
+} catch (fontError) {
+    console.error('❌ [FONT] Failed to register local font:', fontError.message);
+}
 
 const client = new Client({
     intents: [
@@ -42,10 +58,13 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false;
 
-// Generare CAPTCHA sincronă stabilă (Rezolvă eroarea "Interaction Failed")
+// Generare CAPTCHA stabilă cu fontul setat corect
 function generateCaptchaImage(userId) {
     const captcha = new Captcha();
-    captcha.async = false; // Folosirea modului sincron elimină erorile asincrone din canvas
+    captcha.async = false; 
+    
+    // Îi spunem librăriei să folosească fontul înregistrat mai sus ca să nu mai dea crash
+    captcha.font = 'CaptchaCustomFont'; 
     captcha.addDecoy(); 
     captcha.drawTrace(); 
     captcha.drawCaptcha();
@@ -54,7 +73,7 @@ function generateCaptchaImage(userId) {
     return new AttachmentBuilder(captcha.png, { name: 'captcha.png' });
 }
 
-// 🌐 INREGISTRARE AUTOMATA COMANDĂ SLASH /SETUP
+// 🌐 INREGISTRARE AUTOMATA COMANZI
 client.once('ready', async () => {
     console.log(`🤖 Botul ${client.user.tag} este activat și pregătit pentru setup!`);
 
@@ -86,7 +105,7 @@ client.once('ready', async () => {
     }
 });
 
-// 🚀 LOGICA INTELEGENTĂ PENTRU COMANZI ȘI INTERACȚIUNI
+// 🚀 LOGICA PENTRU COMANZI ȘI INTERACȚIUNI
 client.on('interactionCreate', async (interaction) => {
     
     // ==========================================
@@ -121,7 +140,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (!unverifiedRole || !verifiedRole) {
-            return interaction.editReply({ content: '❌ Nu am putut genera rolurile automată. Verifică ierarhia permisiunilor botului!' });
+            return interaction.editReply({ content: '❌ Nu am putut genera rolurile automat. Verifică ierarhia permisiunilor botului!' });
         }
 
         // C. Căutare sau generare automată canal #verify
@@ -142,7 +161,7 @@ client.on('interactionCreate', async (interaction) => {
                     },
                     {
                         id: verifiedRole.id,
-                        deny: [PermissionFlagsBits.ViewChannel] // Canalul dispare după verificare pentru un aspect curat
+                        deny: [PermissionFlagsBits.ViewChannel] 
                     }
                 ]
             }).catch(() => null);
@@ -152,7 +171,7 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Nu am putut genera canalul text de verificare.' });
         }
 
-        // D. Configurare automată a restricțiilor pe RESTUL canalelor de pe server
+        // D. Configurare restricții canale alternative
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
@@ -162,12 +181,10 @@ client.on('interactionCreate', async (interaction) => {
                     SendMessages: false,
                     ReadMessageHistory: false
                 });
-            } catch (err) {
-                console.error(`Eroare la securizarea canalului ${channel.name}:`, err.message);
-            }
+            } catch (err) {}
         }
 
-        // E. Trimiterea panoului oficial cu buton în canalul proaspăt configurat
+        // E. Trimiterea panoului oficial cu buton în canal
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('click_to_verify')
@@ -180,7 +197,7 @@ client.on('interactionCreate', async (interaction) => {
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Setup-ul Automat a Reușit!**\n• Rolurile **UnVerified** și **Verified** sunt active.\n• Canalul <#${verifyChannel.id}> a fost securizat.\n• Toate celelalte canale au fost ascunse de utilizatorii neverificați.` });
+        return interaction.editReply({ content: `✅ **Setup-ul Automat a Reușit!**\n• Rolurile **UnVerified** și **Verified** sunt active.\n• Canalul <#${verifyChannel.id}> a fost securizat.\n• Toate celelalte canale au fost ascunse.` });
     }
 
     // ==========================================
@@ -245,9 +262,7 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // ==========================================
     // GESTIONARE COMANZI AUXILIARE (SCAN & LOCKDOWN)
-    // ==========================================
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'scan') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ Fără permisiune.', ephemeral: true });
@@ -266,7 +281,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Adăugare automată a rolului UnVerified la intrarea pe server
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return; 
     const unverifiedRole = member.guild.roles.cache.find(r => r.name === 'UnVerified');
