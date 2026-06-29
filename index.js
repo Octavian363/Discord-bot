@@ -1,18 +1,18 @@
-// 1. Load environment variables first for security
+// 1. Încărcarea variabilelor secrete pentru securitate
 require('dotenv').config();
 
-// 2. HTTP Server required by Render to prevent "Port Timeout" errors
+// 2. Serverul HTTP pentru compatibilitate obligatorie cu porturile Railway
 const http = require('http');
 const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Strict Hierarchy & Override Enforcement) Online!\n');
+   res.end('Global Security Shield (Hybrid 85/15 Engine) Online on Railway!\n');
 }).listen(port, () => {
-   console.log(`[RENDER] Keep-alive server running on port ${port}.`);
+   console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
 
-// 3. Import required modules from discord.js v14
+// 3. Importurile necesare din discord.js v14 și Canvas
 const { 
     Client, 
     GatewayIntentBits,
@@ -23,9 +23,11 @@ const {
     ButtonStyle,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle
+    TextInputStyle,
+    AttachmentBuilder
 } = require('discord.js');
 const axios = require('axios');
+const { createCanvas } = require('canvas');
 
 const client = new Client({
     intents: [
@@ -37,19 +39,71 @@ const client = new Client({
     ]
 });
 
-// Global storage for active verification codes
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false; 
 
-// Clean code generator
-function generateSecureCode(userId) {
+// 🎯 GENERATORUL HIBRID (85% Imagine Geometrică / 15% Text Simplu)
+function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
     for (let i = 0; i < 5; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    userCaptchas.set(userId, code);
-    return `\`\`\`\nCODE: ${code}\n\`\`\``;
+    userCaptchas.set(userId, code); // Salvăm codul generat pentru verificare
+
+    const percentageRoll = Math.random(); // Generează un număr între 0 și 1
+
+    // ----------------------------------------------------
+    // CAZ 1: Imagine Geometrică Camuflată (85% șanse)
+    // ----------------------------------------------------
+    if (percentageRoll < 0.85) {
+        const canvas = createCanvas(500, 250);
+        const ctx = canvas.getContext('2d');
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const shapeType = Math.floor(Math.random() * 2); // 0 = Cerc, 1 = Dreptunghi
+        const colorPalettes = [
+            { shape: '#FF2222', text: '#E61E1E' }, 
+            { shape: '#00FF44', text: '#00E63D' }, 
+            { shape: '#0044FF', text: '#003DE6' }, 
+            { shape: '#FFB700', text: '#E6A500' }  
+        ];
+        const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
+
+        ctx.fillStyle = palette.shape;
+
+        if (shapeType === 0) {
+            ctx.beginPath();
+            ctx.arc(250, 125, 90, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.fillRect(100, 50, 300, 150);
+        }
+
+        ctx.fillStyle = palette.text;
+        ctx.font = 'bold 44px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.save();
+        ctx.translate(250, 125);
+        ctx.rotate((Math.random() * 0.2) - 0.1); 
+        ctx.fillText(code, 0, 0);
+        ctx.restore();
+
+        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
+        return { type: 'IMAGE', data: attachment };
+    } 
+    
+    // ----------------------------------------------------
+    // CAZ 2: Cod Text Simplu în Block (15% șanse)
+    // ----------------------------------------------------
+    else {
+        const textDisplay = `\`\`\`\nCODE: ${code}\n\`\`\``;
+        return { type: 'TEXT', data: textDisplay };
+    }
 }
 
 function createVerificationModal() {
@@ -59,9 +113,9 @@ function createVerificationModal() {
 
     const codeInput = new TextInputBuilder()
         .setCustomId('input_captcha_field')
-        .setLabel('Put the code:')
+        .setLabel('Put the security code here:')
         .setStyle(TextInputStyle.Short)
-        .setMaxLength(10)
+        .setMaxLength(5)
         .setRequired(true);
 
     return modal.addComponents(new ActionRowBuilder().addComponents(codeInput));
@@ -69,27 +123,15 @@ function createVerificationModal() {
 
 // 🌐 AUTOMATIC SLASH COMMAND SYNC
 client.once('ready', async () => {
-    console.log(`🤖 Bot ${client.user.tag} is online and running in strict English security mode!`);
+    console.log(`🤖 Bot ${client.user.tag} is online and running on Railway!`);
 
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
-            {
-                name: 'setup',
-                description: 'Automatically creates UnVerified/Verified roles, #verify channel, and secures all permissions.'
-            },
-            {
-                name: 'verify',
-                description: 'Open the input field directly to put your verification code.'
-            },
-            {
-                name: 'lockdown',
-                description: 'Enable lockdown mode. Instantly kicks any new member who joins.'
-            },
-            {
-                name: 'unlockdown',
-                description: 'Disable lockdown mode. Allows new members to join normally.'
-            }
+            { name: 'setup', description: 'Automatically creates UnVerified/Verified roles, #verify channel, and secures all permissions.' },
+            { name: 'verify', description: 'Open the input field directly to put your verification code.' },
+            { name: 'lockdown', description: 'Enable lockdown mode. Instantly kicks any new member who joins.' },
+            { name: 'unlockdown', description: 'Disable lockdown mode. Allows new members to join normally.' }
         ];
 
         await axios.put(
@@ -103,7 +145,7 @@ client.once('ready', async () => {
     }
 });
 
-// 🚀 CORE INTERACTION HANDLER (SLASH COMMANDS + BUTTONS + MODALS)
+// 🚀 CORE INTERACTION HANDLER
 client.on('interactionCreate', async (interaction) => {
     
     // ==========================================
@@ -127,26 +169,15 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Role deployment failed. Please check permissions.' });
         }
 
-        // C. Deploy highly restricted #verify channel
         let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
         if (!verifyChannel) {
             verifyChannel = await guild.channels.create({
                 name: 'verify',
                 type: ChannelType.GuildText,
                 permissionOverwrites: [
-                    {
-                        id: guild.roles.everyone.id,
-                        deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages]
-                    },
-                    {
-                        id: unverifiedRole.id,
-                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-                        deny: [PermissionFlagsBits.SendMessages] // Strictly block writing for unverified
-                    },
-                    {
-                        id: verifiedRole.id,
-                        deny: [PermissionFlagsBits.ViewChannel] // Completely hides the channel once verified
-                    }
+                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+                    { id: unverifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
+                    { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }
                 ]
             }).catch(() => null);
         }
@@ -155,33 +186,24 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Error: Failed to generate the verification text channel.' });
         }
 
-        // D. BULLETPROOF LOCKDOWN FOR ALL CHANNELS
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
-            
             try {
                 if (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice) {
-                    // Everyone is blocked by default, Verified is explicitly allowed access
                     await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, Connect: false, Speak: false });
                     await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, Connect: false, Speak: false });
                     await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, Connect: true, Speak: true });
                 } else {
-                    // Hide regular text channels from everyone, only grant viewing and typing to Verified role
                     await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, SendMessages: false });
                     await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, SendMessages: false });
                     await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, SendMessages: true });
                 }
-            } catch (err) {
-                console.error(`Could not lock permissions for channel ${channel.name}:`, err.message);
-            }
+            } catch (err) {}
         }
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('click_to_verify')
-                .setLabel('Get Code')
-                .setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Get Code').setStyle(ButtonStyle.Primary)
         );
 
         await verifyChannel.send({
@@ -189,35 +211,42 @@ client.on('interactionCreate', async (interaction) => {
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! All channels are now dynamically locked based on verification status.**` });
+        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! All channels are now dynamically locked.**` });
     }
 
     // ==========================================
-    // 2. GET CODE BUTTON TRIGGER
+    // 2. GET CODE BUTTON TRIGGER (SISTEM HIBRID)
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         if (interaction.member.roles.cache.some(r => r.name === 'Verified')) {
             return interaction.reply({ content: '✅ You are already fully verified!', ephemeral: true });
         }
 
+        await interaction.deferReply({ ephemeral: true });
+
         try {
             const userId = interaction.user.id;
-            const codeDisplay = generateSecureCode(userId);
+            const challenge = generateSecurityChallenge(userId);
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('trigger_modal_input')
-                    .setLabel('Enter the code')
-                    .setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter the code').setStyle(ButtonStyle.Success)
             );
 
-            return interaction.reply({
-                content: `🔒 **Verification Challenge**\n\nYour security code is listed below:\n${codeDisplay}\nClick the button underneath to submit it. You can also use \`/verify\`.`,
-                components: [row],
-                ephemeral: true
-            });
+            if (challenge.type === 'IMAGE') {
+                return interaction.editReply({
+                    content: `🔒 **Verification Challenge (Visual Check)**\n\nLook closely at the geometric shape below. Find the 5-character camouflaged code and click the button underneath to submit it.`,
+                    files: [challenge.data],
+                    components: [row]
+                });
+            } else {
+                return interaction.editReply({
+                    content: `🔒 **Verification Challenge (Text Check)**\n\nYour security code is listed below:\n${challenge.data}\nClick the button underneath to submit it.`,
+                    components: [row]
+                });
+            }
         } catch (error) {
-            return interaction.reply({ content: '❌ Internal security error.', ephemeral: true });
+            console.error(error);
+            return interaction.editReply({ content: '❌ Internal security canvas error.' });
         }
     }
 
@@ -285,14 +314,12 @@ client.on('interactionCreate', async (interaction) => {
             const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
 
             try {
-                // Încercăm să modificăm rolurile. Dacă ierarhia e greșită, va pica în blocul catch de mai jos.
                 if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole);
                 
-                return interaction.editReply({ content: '✅ Verification successful! Full access granted. The verification channel has been hidden from your view.' });
+                return interaction.editReply({ content: '✅ Verification successful! Full access granted.' });
             } catch (roleError) {
-                console.error('Role hierarchy error:', roleError);
-                return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** The bot was unable to change your roles. Please ensure the bot\'s role is dragged to the **VERY TOP** of the roles list in Server Settings, above UnVerified and Verified!' });
+                return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** Drag the bot\'s role to the top of the list in Server Settings!' });
             }
         } else {
             return interaction.editReply({ content: '❌ Invalid code! Click **Get Code** again.' });
