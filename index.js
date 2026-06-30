@@ -12,7 +12,7 @@ http.createServer((req, res) => {
    console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
 
-// 3. Importurile necesare din discord.js v14 și Canvas
+// 3. Importurile necesare din discord.js v14, Canvas și File System
 const { 
     Client, 
     GatewayIntentBits,
@@ -27,7 +27,17 @@ const {
     AttachmentBuilder
 } = require('discord.js');
 const axios = require('axios');
-const { createCanvas } = require('canvas');
+const { createCanvas, registerFont } = require('canvas');
+const fs = require('fs');
+const path = require('path');
+
+// Înregistrare font local pentru a repara pătrățelele goale (tofu blocks)
+try {
+    registerFont('./captcha-font.ttf', { family: 'CaptchaFont' });
+    console.log('✅ Fontul local "captcha-font.ttf" a fost înregistrat cu succes.');
+} catch (fontError) {
+    console.error('⚠️ Nu s-a putut încărca fontul local, se va folosi fallback-ul de sistem:', fontError.message);
+}
 
 const client = new Client({
     intents: [
@@ -42,20 +52,31 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false; 
 
-// 🎯 GENERATORUL HIBRID (85% Imagine Geometrică / 15% Text Simplu)
+// 🔴 CONFIGURARE ID-URI SUPLIMENTARE (Dacă mai vrei să adaugi rapid și din cod)
+const ROBLOX_GROUP_IDS = [
+    "55346",
+    "533532"
+];
+
+// Fișierele text din folderul tău din care botul va extrage automat TOATE ID-urile pentru BAN
+const TXT_BAN_FILES = [
+    'Beat Banger Members.txt',
+    'Bun fan members.txt',
+    'FelinoMembers.txt',
+    'user_ids.txt'
+];
+
+// 🎯 GENERATORUL HIBRID CORIJAT
 function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
     for (let i = 0; i < 5; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    userCaptchas.set(userId, code); // Salvăm codul generat pentru verificare
+    userCaptchas.set(userId, code);
 
-    const percentageRoll = Math.random(); // Generează un număr între 0 și 1
+    const percentageRoll = Math.random();
 
-    // ----------------------------------------------------
-    // CAZ 1: Imagine Geometrică Camuflată (85% șanse)
-    // ----------------------------------------------------
     if (percentageRoll < 0.85) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
@@ -63,7 +84,7 @@ function generateSecurityChallenge(userId) {
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const shapeType = Math.floor(Math.random() * 2); // 0 = Cerc, 1 = Dreptunghi
+        const shapeType = Math.floor(Math.random() * 2);
         const colorPalettes = [
             { shape: '#FF2222', text: '#E61E1E' }, 
             { shape: '#00FF44', text: '#00E63D' }, 
@@ -83,7 +104,7 @@ function generateSecurityChallenge(userId) {
         }
 
         ctx.fillStyle = palette.text;
-        ctx.font = 'bold 44px sans-serif';
+        ctx.font = 'bold 44px "CaptchaFont"';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
@@ -95,12 +116,7 @@ function generateSecurityChallenge(userId) {
 
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
         return { type: 'IMAGE', data: attachment };
-    } 
-    
-    // ----------------------------------------------------
-    // CAZ 2: Cod Text Simplu în Block (15% șanse)
-    // ----------------------------------------------------
-    else {
+    } else {
         const textDisplay = `\`\`\`\nCODE: ${code}\n\`\`\``;
         return { type: 'TEXT', data: textDisplay };
     }
@@ -121,15 +137,16 @@ function createVerificationModal() {
     return modal.addComponents(new ActionRowBuilder().addComponents(codeInput));
 }
 
-// 🌐 AUTOMATIC SLASH COMMAND SYNC
+// 🌐 AUTOMATIC SLASH COMMAND SYNC (Sincronizează noul sistem global /scan)
 client.once('ready', async () => {
-    console.log(`🤖 Bot ${client.user.tag} is online and running on Railway!`);
+    console.log(`🤖 Bot ${client.user.tag} este online și pregătit pentru scanare generală!`);
 
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
-            { name: 'setup', description: 'Automatically creates UnVerified/Verified roles, #verify channel, and secures all permissions.' },
+            { name: 'setup', description: 'Automatically creates UnVerified/Verified roles and securing all permissions.' },
             { name: 'verify', description: 'Open the input field directly to put your verification code.' },
+            { name: 'scan', description: 'Scans all files and group IDs to immediately ban blacklisted accounts.' },
             { name: 'lockdown', description: 'Enable lockdown mode. Instantly kicks any new member who joins.' },
             { name: 'unlockdown', description: 'Disable lockdown mode. Allows new members to join normally.' }
         ];
@@ -139,9 +156,9 @@ client.once('ready', async () => {
             commandData,
             { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        console.log('✅ Slash commands successfully registered to Discord API.');
+        console.log('✅ Toate comenzile slash au fost actualizate pe Discord.');
     } catch (error) {
-        console.error('❌ Failed to sync slash commands:', error.message);
+        console.error('❌ Eroare la sincronizarea comenzilor slash:', error.message);
     }
 });
 
@@ -215,7 +232,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 2. GET CODE BUTTON TRIGGER (SISTEM HIBRID)
+    // 2. GET CODE BUTTON TRIGGER
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         if (interaction.member.roles.cache.some(r => r.name === 'Verified')) {
@@ -274,7 +291,61 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 5. LOCKDOWN & UNLOCKDOWN SLASH COMMANDS
+    // 5. /SCAN GLOBAL COMMAND (BANEAZĂ DUPĂ TOATE ID-URILE DIN TXT)
+    // ==========================================
+    if (interaction.isChatInputCommand() && interaction.commandName === 'scan') {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: '❌ Nu ai permisiunea de Administrator pentru a rula scanarea.', ephemeral: true });
+        }
+
+        await interaction.deferReply({ ephemeral: true });
+
+        const blacklistedIds = new Set();
+
+        // Încărcăm în memorie absolut toate liniile din fișierele tale text
+        TXT_BAN_FILES.forEach(fileName => {
+            const filePath = path.join(__dirname, fileName);
+            if (fs.existsSync(filePath)) {
+                try {
+                    const content = fs.readFileSync(filePath, 'utf-8');
+                    content.split(/\r?\n/).forEach(line => {
+                        const trimmed = line.trim();
+                        if (trimmed) blacklistedIds.add(trimmed);
+                    });
+                } catch (readErr) {
+                    console.error(`Eroare la citirea fișierului ${fileName}:`, readErr.message);
+                }
+            }
+        });
+
+        // Adăugăm și ID-urile din cod
+        ROBLOX_GROUP_IDS.forEach(id => blacklistedIds.add(id.trim()));
+
+        // Scanăm membrii serverului Discord
+        const members = await interaction.guild.members.fetch();
+        let banCount = 0;
+
+        for (const [id, member] of members) {
+            if (member.user.bot) continue;
+
+            // Dacă ID-ul de utilizator se află în lista neagră de grupuri/ID-uri, primește BAN instant
+            if (blacklistedIds.has(member.id)) {
+                try {
+                    await member.ban({ reason: 'Identificat în baza de date globală de securitate (.txt / Liste Condo)' });
+                    banCount++;
+                } catch (banErr) {
+                    console.error(`Eroare la banarea membrului ${member.user.tag}:`, banErr.message);
+                }
+            }
+        }
+
+        return interaction.editReply({ 
+            content: `🛡️ **Scanare globală finalizată cu succes!**\n\n• ID-uri unice (condo/grupuri) încărcate în baza de date: **${blacklistedIds.size}**\n• Utilizatori dăunători depistați și banați: **${banCount}**` 
+        });
+    }
+
+    // ==========================================
+    // 6. LOCKDOWN & UNLOCKDOWN SLASH COMMANDS
     // ==========================================
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'lockdown') {
@@ -295,7 +366,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 6. POP-UP MODAL CODE VALIDATION
+    // 7. POP-UP MODAL CODE VALIDATION
     // ==========================================
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
@@ -328,7 +399,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// 7. ANTI-RAID KICK ON JOIN
+// 8. ANTI-RAID KICK ON JOIN
 // ==========================================
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return; 
