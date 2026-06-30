@@ -345,5 +345,4 @@ client.on('guildMemberAdd', async (member) => {
     if (unverifiedRole) await member.roles.add(unverifiedRole).catch(() => null);
 });
 
-client.login(process.env.DISCORD_TOKEN);/ /   R e - d e p l o y   f o r a t   p e   R a i l w a y  
- 
+client.login(process.env.DISCORD_TOKEN);
