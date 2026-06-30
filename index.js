@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Hybrid 50/35/15 Engine) Online on Railway!\n');
+   res.end('Global Security Shield (Hybrid 65/30/5 Engine) Online on Railway!\n');
 }).listen(port, () => {
    console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
@@ -68,7 +68,7 @@ const TXT_BAN_FILES = [
     'user_ids.txt'
 ];
 
-// 🎯 HYBRID CAPTCHA GENERATOR ENGINE (50% Distorted Box / 35% Geometric Camouflage / 15% Text)
+// 🎯 HYBRID CAPTCHA GENERATOR ENGINE (65% Distorted Box / 30% Geometric Camouflage / 5% Text Only)
 function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
@@ -80,27 +80,27 @@ function generateSecurityChallenge(userId) {
     const percentageRoll = Math.random();
 
     // ==========================================================
-    // TIPUL 1 (50% Șanse): Cutie colorată, linii ondulate și text distorsionat
+    // TIPUL 1 (65% Șanse): Text amestecat, rotit, distorsionat cu linii de camuflaj
     // ==========================================================
-    if (percentageRoll < 0.50) {
+    if (percentageRoll < 0.65) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
         
         const palettes = [
-            { bg: '#0044FF', text: '#0031B8' }, 
-            { bg: '#FF2222', text: '#B81414' }, 
-            { bg: '#00FF44', text: '#00B831' }, 
-            { bg: '#FFB700', text: '#B88400' }  
+            { bg: '#0044FF', text: '#0026C4' }, 
+            { bg: '#FF2222', text: '#BF1919' }, 
+            { bg: '#00FF44', text: '#00BF31' }, 
+            { bg: '#FFB700', text: '#D19600' }  
         ];
         const color = palettes[Math.floor(Math.random() * palettes.length)];
 
         ctx.fillStyle = color.bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Linii "întortocheate" în fundal
+        // Linii distorsionate suprapuse peste text
         ctx.strokeStyle = color.text;
         ctx.lineWidth = 3;
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 7; i++) {
             ctx.beginPath();
             ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
             ctx.bezierCurveTo(
@@ -112,17 +112,17 @@ function generateSecurityChallenge(userId) {
         }
 
         ctx.fillStyle = color.text;
-        ctx.font = 'bold 55px sans-serif'; // Safe fallback standard pentru Linux/Railway
+        ctx.font = 'bold 52px sans-serif'; 
         ctx.textBaseline = 'middle';
 
-        const startX = 80;
-        const spacing = 70;
+        const startX = 75;
+        const spacing = 75;
 
         for (let i = 0; i < code.length; i++) {
             ctx.save();
-            const x = startX + (i * spacing) + (Math.random() * 15 - 7);
-            const y = 125 + (Math.random() * 20 - 10);
-            const angle = (Math.random() * 0.4) - 0.2; 
+            const x = startX + (i * spacing) + (Math.random() * 16 - 8);
+            const y = 125 + (Math.random() * 24 - 12);
+            const angle = (Math.random() * 0.5) - 0.25; 
 
             ctx.translate(x, y);
             ctx.rotate(angle);
@@ -134,51 +134,54 @@ function generateSecurityChallenge(userId) {
         return { type: 'IMAGE_DISTORTED', data: attachment };
     } 
     // ==========================================================
-    // TIPUL 2 (35% Șanse): Formă geometrică cu text camuflat (Greu de văzut)
+    // TIPUL 2 (30% Șanse): Stilul geometric curat (Dreptunghi verde / Cerc albastru) camuflat
     // ==========================================================
-    else if (percentageRoll < 0.85) {
+    else if (percentageRoll < 0.95) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
         
+        // Fundal alb exterior general
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         const shapeType = Math.floor(Math.random() * 2);
         
-        const colorPalettes = [
+        const camouflagePalettes = [
+            { shape: '#00FF44', text: '#00EA3B' }, // Verdele strălucitor (DZ8N2 style)
+            { shape: '#0044FF', text: '#0036E6' }, // Cercul albastru original (USG68 style)
             { shape: '#FF2222', text: '#FF0000' }, 
-            { shape: '#00FF44', text: '#00EA3B' }, 
-            { shape: '#0044FF', text: '#0036E6' }, 
             { shape: '#FFB700', text: '#F0AA00' }  
         ];
-        const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
+        const palette = camouflagePalettes[Math.floor(Math.random() * camouflagePalettes.length)];
 
         ctx.fillStyle = palette.shape;
 
         if (shapeType === 0) {
+            // Cercul camuflat curat
             ctx.beginPath();
-            ctx.arc(250, 125, 90, 0, Math.PI * 2);
+            ctx.arc(250, 125, 95, 0, Math.PI * 2);
             ctx.fill();
         } else {
+            // Dreptunghiul interior curat (Stilul verde)
             ctx.fillRect(100, 50, 300, 150);
         }
 
         ctx.fillStyle = palette.text;
-        ctx.font = 'bold 44px "CaptchaFont"'; 
+        ctx.font = 'bold 46px "CaptchaFont"'; 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
         ctx.save();
         ctx.translate(250, 125);
-        ctx.rotate((Math.random() * 0.2) - 0.1); 
+        ctx.rotate((Math.random() * 0.16) - 0.08); 
         ctx.fillText(code, 0, 0);
         ctx.restore();
 
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
-        return { type: 'IMAGE_CAMOUFLAGE', data: attachment };
+        return { type: 'IMAGE_GEOMETRIC', data: attachment };
     } 
     // ==========================================================
-    // TIPUL 3 (15% Șanse): Text simplu securizat în bloc de cod
+    // TIPUL 3 (5% Șanse): Doar text în bloc de cod (Fără nicio imagine)
     // ==========================================================
     else {
         const textDisplay = `\`\`\`\nCODE: ${code}\n\`\`\``;
@@ -315,19 +318,19 @@ client.on('interactionCreate', async (interaction) => {
 
             if (challenge.type === 'IMAGE_DISTORTED') {
                 return interaction.editReply({
-                    content: `🔒 **Verification Challenge (Advanced Check)**\n\nLook closely at the color box below. Find the 5-character distorted code hidden behind the lines and click the button underneath to submit it.`,
+                    content: `🔒 **Verification Challenge (Distorted Engine)**\n\nLook closely at the canvas below. Find the 5-character amestecat code and submit it using the green button.`,
                     files: [challenge.data],
                     components: [row]
                 });
-            } else if (challenge.type === 'IMAGE_CAMOUFLAGE') {
+            } else if (challenge.type === 'IMAGE_GEOMETRIC') {
                 return interaction.editReply({
-                    content: `🔒 **Verification Challenge (Visual Camouflage)**\n\nLook closely at the geometric shape below. Find the 5-character camouflaged code and click the button underneath to submit it.`,
+                    content: `🔒 **Verification Challenge (Camouflage Shape)**\n\nLook closely inside the colored element. Find the 5-character low-visibility code and submit it using the green button.`,
                     files: [challenge.data],
                     components: [row]
                 });
             } else {
                 return interaction.editReply({
-                    content: `🔒 **Verification Challenge (Standard Text)**\n\nYour security code is listed below:\n${challenge.data}\nClick the button underneath to submit it.`,
+                    content: `🔒 **Verification Challenge (Code Block)**\n\nYour security code is listed below:\n${challenge.data}\nClick the button underneath to submit it.`,
                     components: [row]
                 });
             }
