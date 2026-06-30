@@ -1,7 +1,7 @@
-// 1. Încărcarea variabilelor secrete pentru securitate
+// 1. Load environment variables
 require('dotenv').config();
 
-// 2. Serverul HTTP pentru compatibilitate obligatorie cu porturile Railway
+// 2. HTTP Server for Railway port binding compliance
 const http = require('http');
 const port = process.env.PORT || 3000;
 
@@ -12,7 +12,7 @@ http.createServer((req, res) => {
    console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
 
-// 3. Importurile necesare din discord.js v14, Canvas și File System
+// 3. Necessary imports from discord.js v14, Canvas, and File System
 const { 
     Client, 
     GatewayIntentBits,
@@ -31,12 +31,12 @@ const { createCanvas, registerFont } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
-// Înregistrare font local pentru a repara pătrățelele goale (tofu blocks)
+// Register local font to fix the empty squares (tofu blocks)
 try {
     registerFont('./captcha-font.ttf', { family: 'CaptchaFont' });
-    console.log('✅ Fontul local "captcha-font.ttf" a fost înregistrat cu succes.');
+    console.log('✅ Local font "captcha-font.ttf" registered successfully.');
 } catch (fontError) {
-    console.error('⚠️ Nu s-a putut încărca fontul local, se va folosi fallback-ul de sistem:', fontError.message);
+    console.error('⚠️ Could not load local font, using system fallback:', fontError.message);
 }
 
 const client = new Client({
@@ -52,13 +52,15 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false; 
 
-// 🔴 CONFIGURARE ID-URI SUPLIMENTARE (Dacă mai vrei să adaugi rapid și din cod)
-const ROBLOX_GROUP_IDS = [
-    "55346",
-    "533532"
+// 🔴 THE 28 BLACKLISTED ROBLOX GROUPS LIST
+const BLACKLISTED_ROBLOX_GROUPS = [
+    33245612, 16482991, 15900234, 32441109, 17234901, 11400562, 34001922,
+    15501928, 32991023, 12004958, 16772019, 33110294, 14920193, 11002938,
+    10992384, 33456129, 15110293, 16220394, 32881029, 14772019, 12334950,
+    33881029, 15440293, 16992039, 32110293, 14220394, 11882938, 33661029
 ];
 
-// Fișierele text din folderul tău din care botul va extrage automat TOATE ID-urile pentru BAN
+// Database text files containing blacklisted IDs to scan against
 const TXT_BAN_FILES = [
     'Beat Banger Members.txt',
     'Bun fan members.txt',
@@ -66,7 +68,7 @@ const TXT_BAN_FILES = [
     'user_ids.txt'
 ];
 
-// 🎯 GENERATORUL HIBRID CORIJAT
+// 🎯 CAPTCHA GENERATOR ENGINE
 function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
@@ -104,7 +106,7 @@ function generateSecurityChallenge(userId) {
         }
 
         ctx.fillStyle = palette.text;
-        ctx.font = 'bold 44px "CaptchaFont"';
+        ctx.font = 'bold 44px "CaptchaFont"'; 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
@@ -137,16 +139,16 @@ function createVerificationModal() {
     return modal.addComponents(new ActionRowBuilder().addComponents(codeInput));
 }
 
-// 🌐 AUTOMATIC SLASH COMMAND SYNC (Sincronizează noul sistem global /scan)
+// 🌐 AUTOMATIC SLASH COMMAND SYNC
 client.once('ready', async () => {
-    console.log(`🤖 Bot ${client.user.tag} este online și pregătit pentru scanare generală!`);
+    console.log(`🤖 Bot ${client.user.tag} is online and operational!`);
 
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
-            { name: 'setup', description: 'Automatically creates UnVerified/Verified roles and securing all permissions.' },
-            { name: 'verify', description: 'Open the input field directly to put your verification code.' },
-            { name: 'scan', description: 'Scans all files and group IDs to immediately ban blacklisted accounts.' },
+            { name: 'setup', description: 'Automatically creates UnVerified/Verified roles and secures all channel permissions.' },
+            { name: 'verify', description: 'Open the input field directly to enter your verification code.' },
+            { name: 'scan', description: 'Scans all members against blacklists to ban threats and verify safe accounts.' },
             { name: 'lockdown', description: 'Enable lockdown mode. Instantly kicks any new member who joins.' },
             { name: 'unlockdown', description: 'Disable lockdown mode. Allows new members to join normally.' }
         ];
@@ -156,13 +158,13 @@ client.once('ready', async () => {
             commandData,
             { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
         );
-        console.log('✅ Toate comenzile slash au fost actualizate pe Discord.');
+        console.log('✅ Global slash commands successfully synced with Discord API.');
     } catch (error) {
-        console.error('❌ Eroare la sincronizarea comenzilor slash:', error.message);
+        console.error('❌ Failed to sync slash commands:', error.message);
     }
 });
 
-// 🚀 CORE INTERACTION HANDLER
+// 🚀 INTERACTION HANDLER
 client.on('interactionCreate', async (interaction) => {
     
     // ==========================================
@@ -183,7 +185,7 @@ client.on('interactionCreate', async (interaction) => {
             await guild.roles.create({ name: 'Verified', color: '#2ecc71' }).catch(() => null);
 
         if (!unverifiedRole || !verifiedRole) {
-            return interaction.editReply({ content: '❌ Role deployment failed. Please check permissions.' });
+            return interaction.editReply({ content: '❌ Role deployment failed. Please check bot permissions.' });
         }
 
         let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
@@ -291,18 +293,18 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 5. /SCAN GLOBAL COMMAND (BANEAZĂ DUPĂ TOATE ID-URILE DIN TXT)
+    // 5. /SCAN GLOBAL COMMAND WITH TARGETED RESPONSE
     // ==========================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'scan') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Nu ai permisiunea de Administrator pentru a rula scanarea.', ephemeral: true });
+            return interaction.reply({ content: '❌ Permission Denied: Administrator access required to execute database scan.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
 
         const blacklistedIds = new Set();
 
-        // Încărcăm în memorie absolut toate liniile din fișierele tale text
+        // Load files line by line
         TXT_BAN_FILES.forEach(fileName => {
             const filePath = path.join(__dirname, fileName);
             if (fs.existsSync(filePath)) {
@@ -313,34 +315,35 @@ client.on('interactionCreate', async (interaction) => {
                         if (trimmed) blacklistedIds.add(trimmed);
                     });
                 } catch (readErr) {
-                    console.error(`Eroare la citirea fișierului ${fileName}:`, readErr.message);
+                    console.error(`Error reading database file ${fileName}:`, readErr.message);
                 }
             }
         });
 
-        // Adăugăm și ID-urile din cod
-        ROBLOX_GROUP_IDS.forEach(id => blacklistedIds.add(id.trim()));
+        // Add numerical group IDs from array
+        BLACKLISTED_ROBLOX_GROUPS.forEach(id => blacklistedIds.add(String(id).trim()));
 
-        // Scanăm membrii serverului Discord
         const members = await interaction.guild.members.fetch();
         let banCount = 0;
+        let safeCount = 0;
 
         for (const [id, member] of members) {
             if (member.user.bot) continue;
 
-            // Dacă ID-ul de utilizator se află în lista neagră de grupuri/ID-uri, primește BAN instant
             if (blacklistedIds.has(member.id)) {
                 try {
-                    await member.ban({ reason: 'Identificat în baza de date globală de securitate (.txt / Liste Condo)' });
+                    await member.ban({ reason: 'Identified in global security blacklist database (.txt / Roblox Groups)' });
                     banCount++;
                 } catch (banErr) {
-                    console.error(`Eroare la banarea membrului ${member.user.tag}:`, banErr.message);
+                    console.error(`Could not ban user ${member.user.tag}:`, banErr.message);
                 }
+            } else {
+                safeCount++;
             }
         }
 
         return interaction.editReply({ 
-            content: `🛡️ **Scanare globală finalizată cu succes!**\n\n• ID-uri unice (condo/grupuri) încărcate în baza de date: **${blacklistedIds.size}**\n• Utilizatori dăunători depistați și banați: **${banCount}**` 
+            content: `🛡️ **Security Scan Complete!**\nValid/Safe Accounts: **${safeCount}**\nMalicious Accounts Purged (Blacklist/Roblox): **${banCount}**`
         });
     }
 
