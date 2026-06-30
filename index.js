@@ -87,11 +87,13 @@ function generateSecurityChallenge(userId) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         const shapeType = Math.floor(Math.random() * 2);
+        
+        // 🛑 COLOR PALETTES - TUNED FOR LOW VISIBILITY
         const colorPalettes = [
-            { shape: '#FF2222', text: '#E61E1E' }, 
-            { shape: '#00FF44', text: '#00E63D' }, 
-            { shape: '#0044FF', text: '#003DE6' }, 
-            { shape: '#FFB700', text: '#E6A500' }  
+            { shape: '#FF2222', text: '#FF0000' }, // Red shape, pure red text (very close)
+            { shape: '#00FF44', text: '#00EA3B' }, // Green shape, slightly different green text
+            { shape: '#0044FF', text: '#0036E6' }, // Blue shape, darker blue text
+            { shape: '#FFB700', text: '#F0AA00' }  // Yellow shape, slightly desaturated yellow text
         ];
         const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
 
@@ -293,14 +295,15 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 5. /SCAN GLOBAL COMMAND WITH TARGETED RESPONSE
+    // 5. /SCAN GLOBAL COMMAND (NOW PUBLIC TO ALL MEMBERS)
     // ==========================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'scan') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Permission Denied: Administrator access required to execute database scan.', ephemeral: true });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        // Ephemeral is omitted here to make the reply public!
+        await interaction.deferReply();
 
         const blacklistedIds = new Set();
 
