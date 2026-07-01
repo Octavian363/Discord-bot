@@ -1,18 +1,16 @@
 // 1. Load environment variables
 require('dotenv').config();
 
-// 2. HTTP Server for Railway port binding compliance
 const http = require('http');
 const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Strict Database Scan via BannedGroups.txt) Online!\n');
+   res.end('Ro-Scanner (Multi-Style Captcha & Group Check) Online!\n');
 }).listen(port, () => {
-   console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
+   console.log(`[SERVER] Running on port ${port}.`);
 });
 
-// 3. Necessary imports from discord.js v14, Canvas, and File System
 const { 
     Client, 
     GatewayIntentBits,
@@ -26,432 +24,272 @@ const {
     TextInputStyle,
     AttachmentBuilder
 } = require('discord.js');
+const axios = require('axios');
 const { createCanvas, registerFont } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
-// Register local font to fix the empty squares
 try {
     registerFont('./captcha-font.ttf', { family: 'CaptchaFont' });
-    console.log('✅ Local font "captcha-font.ttf" registered successfully.');
-} catch (fontError) {
-    console.error('⚠️ Could not load local font, using system fallback:', fontError.message);
-}
+} catch (err) {}
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.MessageContent
     ]
 });
 
 const userCaptchas = new Map();
-let LOCKDOWN_MODE = false; 
 
-// Database text files containing blacklisted IDs to scan against
-const TXT_BAN_FILES = [
-    'Beat Banger Members.txt',
-    'Bun fan members.txt',
-    'FelinoMembers.txt',
-    'user_ids.txt',
-    'BannedGroups.txt' // <--- Noul tău fișier integrat direct în motorul de scanare
-];
-
-// Helper to compile the blacklist set from local text files
-function getBlacklistSet() {
-    const blacklistedIds = new Set();
-    TXT_BAN_FILES.forEach(fileName => {
-        const filePath = path.join(__dirname, fileName);
-        if (fs.existsSync(filePath)) {
-            try {
-                const content = fs.readFileSync(filePath, 'utf-8');
-                content.split(/\r?\n/).forEach(line => {
-                    const trimmed = line.trim();
-                    if (trimmed) blacklistedIds.add(trimmed);
-                });
-            } catch (err) {
-                console.error(`Error reading ${fileName}:`, err.message);
-            }
+// Curăță și extrage strict ID-urile numerice din BannedGroups.txt
+function getBannedRobloxGroups() {
+    const bannedGroups = new Set();
+    const filePath = path.join(__dirname, 'BannedGroups.txt');
+    if (fs.existsSync(filePath)) {
+        try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            content.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                const idOnly = trimmed.replace(/\D/g, ''); // Elimină sau alte caractere non-cifre
+                if (idOnly) bannedGroups.add(Number(idOnly));
+            });
+        } catch (err) {
+            console.error('Error reading BannedGroups.txt:', err.message);
         }
-    });
-    return blacklistedIds;
+    }
+    return bannedGroups;
 }
 
-// 🎯 HYBRID CAPTCHA GENERATOR ENGINE (65% Distorted Box / 30% Geometric Camouflage / 5% Text Only)
+// Generează dinamic stilurile trimise în imagini (Albastru Cerc, Verde Dreptunghi, Roșu Linii)
 function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
-    for (let i = 0; i < 5; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    for (let i = 0; i < 5; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
     userCaptchas.set(userId, code);
 
-    const percentageRoll = Math.random();
+    const canvas = createCanvas(600, 300);
+    const ctx = canvas.getContext('2d');
+    
+    // Fundal alb general generat curat
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // TIPUL 1 (65% Șanse): Text amestecat, rotit, distorsionat cu linii de camuflaj
-    if (percentageRoll < 0.65) {
-        const canvas = createCanvas(500, 250);
-        const ctx = canvas.getContext('2d');
-        
-        const palettes = [
-            { bg: '#0044FF', text: '#0026C4' }, 
-            { bg: '#FF2222', text: '#BF1919' }, 
-            { bg: '#00FF44', text: '#00BF31' }, 
-            { bg: '#FFB700', text: '#D19600' }  
-        ];
-        const color = palettes[Math.floor(Math.random() * palettes.length)];
+    const styleRoll = Math.random();
 
-        ctx.fillStyle = color.bg;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (styleRoll < 0.34) {
+        // STILUL 1: Cercul Albastru (Inspirat de imaginea ta USG68)
+        ctx.fillStyle = '#0044FF'; 
+        ctx.beginPath();
+        ctx.arc(300, 150, 120, 0, Math.PI * 2);
+        ctx.fill();
 
-        ctx.strokeStyle = color.text;
-        ctx.lineWidth = 3;
-        for (let i = 0; i < 7; i++) {
-            ctx.beginPath();
-            ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
-            ctx.bezierCurveTo(
-                Math.random() * canvas.width, Math.random() * canvas.height,
-                Math.random() * canvas.width, Math.random() * canvas.height,
-                Math.random() * canvas.width, Math.random() * canvas.height
-            );
-            ctx.stroke();
-        }
-
-        ctx.fillStyle = color.text;
-        ctx.font = 'bold 52px sans-serif'; 
-        ctx.textBaseline = 'middle';
-
-        const startX = 75;
-        const spacing = 75;
-
-        for (let i = 0; i < code.length; i++) {
-            ctx.save();
-            const x = startX + (i * spacing) + (Math.random() * 16 - 8);
-            const y = 125 + (Math.random() * 24 - 12);
-            const angle = (Math.random() * 0.5) - 0.25; 
-
-            ctx.translate(x, y);
-            ctx.rotate(angle);
-            ctx.fillText(code[i], 0, 0);
-            ctx.restore();
-        }
-
-        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
-        return { type: 'IMAGE_DISTORTED', data: attachment };
-    } 
-    // TIPUL 2 (30% Șanse): Stilul geometric curat (Dreptunghi verde / Cerc albastru) camuflat
-    else if (percentageRoll < 0.95) {
-        const canvas = createCanvas(500, 250);
-        const ctx = canvas.getContext('2d');
-        
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        const shapeType = Math.floor(Math.random() * 2);
-        
-        const camouflagePalettes = [
-            { shape: '#00FF44', text: '#00EA3B' }, 
-            { shape: '#0044FF', text: '#0036E6' }, 
-            { shape: '#FF2222', text: '#FF0000' }, 
-            { shape: '#FFB700', text: '#F0AA00' }  
-        ];
-        const palette = camouflagePalettes[Math.floor(Math.random() * camouflagePalettes.length)];
-
-        ctx.fillStyle = palette.shape;
-
-        if (shapeType === 0) {
-            ctx.beginPath();
-            ctx.arc(250, 125, 95, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            ctx.fillRect(100, 50, 300, 150);
-        }
-
-        ctx.fillStyle = palette.text;
-        ctx.font = 'bold 46px "CaptchaFont"'; 
+        ctx.fillStyle = '#002BB3'; // Text de vizibilitate redusă (nuanță apropiată)
+        ctx.font = 'bold 55px sans-serif'; 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
         ctx.save();
-        ctx.translate(250, 125);
-        ctx.rotate((Math.random() * 0.16) - 0.08); 
+        ctx.translate(300, 150);
+        ctx.rotate(-0.05); // O ușoară înclinație stilistică
         ctx.fillText(code, 0, 0);
         ctx.restore();
 
-        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
-        return { type: 'IMAGE_GEOMETRIC', data: attachment };
-    } 
-    // TIPUL 3 (5% Șanse): Doar text în bloc de cod (Fără imagine)
-    else {
-        const textDisplay = `\`\`\`\nCODE: ${code}\n\`\`\``;
-        return { type: 'TEXT', data: textDisplay };
+    } else if (styleRoll < 0.67) {
+        // STILUL 2: Dreptunghiul Verde (Inspirat de imaginea ta DZ8N2)
+        ctx.fillStyle = '#00FF44'; 
+        ctx.fillRect(100, 50, 400, 200);
+
+        ctx.fillStyle = '#00B330'; 
+        ctx.font = 'bold 55px sans-serif'; 
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(code, 300, 150);
+
+    } else {
+        // STILUL 3: Cutia Roșie cu Linii de distorsionare (Inspirat de imaginea ta 4JP39)
+        ctx.fillStyle = '#FF2222'; 
+        ctx.fillRect(30, 30, 540, 240);
+
+        // Adăugăm liniile de camuflaj specifice
+        ctx.strokeStyle = '#B31919';
+        ctx.lineWidth = 4;
+        for (let i = 0; i < 6; i++) {
+            ctx.beginPath();
+            ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+            ctx.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#991414'; 
+        ctx.font = 'bold 60px sans-serif'; 
+        ctx.textBaseline = 'middle';
+        
+        const startX = 130;
+        const spacing = 75;
+        for (let i = 0; i < code.length; i++) {
+            ctx.save();
+            const x = startX + (i * spacing);
+            const y = 150 + (Math.random() * 30 - 15);
+            ctx.translate(x, y);
+            ctx.rotate((Math.random() * 0.4) - 0.2);
+            ctx.fillText(code[i], 0, 0);
+            ctx.restore();
+        }
     }
+
+    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
+    return { data: attachment };
 }
 
 function createVerificationModal() {
     const modal = new ModalBuilder()
         .setCustomId('modal_captcha_submit')
-        .setTitle('Security Verification');
+        .setTitle('Ro-scanner: Are you a human?');
+
+    const robloxInput = new TextInputBuilder()
+        .setCustomId('input_roblox_username')
+        .setLabel('YOUR ROBLOX USERNAME:')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g., Octavian_908alt')
+        .setRequired(true);
 
     const codeInput = new TextInputBuilder()
         .setCustomId('input_captcha_field')
-        .setLabel('Put the security code here:')
+        .setLabel('ENTER THE SECURITY CODE:')
         .setStyle(TextInputStyle.Short)
         .setMaxLength(5)
         .setRequired(true);
 
-    return modal.addComponents(new ActionRowBuilder().addComponents(codeInput));
+    return modal.addComponents(
+        new ActionRowBuilder().addComponents(robloxInput),
+        new ActionRowBuilder().addComponents(codeInput)
+    );
 }
 
-// 🌐 AUTOMATIC SLASH COMMAND SYNC
 client.once('ready', async () => {
-    console.log(`🤖 Bot ${client.user.tag} is online and operational!`);
+    console.log(`🤖 Ro-Scanner system online and ready.`);
     try {
         const appId = client.application?.id || client.user?.id;
-        const commandData = [
-            { name: 'setup', description: 'Automatically creates UnVerified/Verified roles and secures all channel permissions.' },
-            { name: 'verify', description: 'Open the input field directly to enter your verification code.' },
-            { name: 'scan', description: 'Scans all members against blacklists to ban threats and verify safe accounts.' },
-            { name: 'lockdown', description: 'Enable lockdown mode. Instantly kicks any new member who joins.' },
-            { name: 'unlockdown', description: 'Disable lockdown mode. Allows new members to join normally.' }
-        ];
-
-        const axios = require('axios');
-        await axios.put(
-            `https://discord.com/api/v10/applications/${appId}/commands`,
-            commandData,
-            { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' } }
-        );
-        console.log('✅ Global slash commands successfully synced with Discord API.');
-    } catch (error) {
-        console.error('❌ Failed to sync slash commands:', error.message);
-    }
+        const commandData = [{ name: 'setup', description: 'Deploys Ro-scanner text channel interface.' }];
+        await axios.put(`https://discord.com/api/v10/applications/${appId}/commands`, commandData, {
+            headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' }
+        });
+    } catch (err) {}
 });
 
-// 🚀 INTERACTION HANDLER
 client.on('interactionCreate', async (interaction) => {
     
-    // Setup Logic
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Access Denied: Administrator permission required.', ephemeral: true });
-        }
-
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ Admin required.', ephemeral: true });
         await interaction.deferReply({ ephemeral: true });
-        const guild = interaction.guild;
-
-        let unverifiedRole = guild.roles.cache.find(r => r.name === 'UnVerified') || 
-            await guild.roles.create({ name: 'UnVerified', color: '#7f8c8d' }).catch(() => null);
-
-        let verifiedRole = guild.roles.cache.find(r => r.name === 'Verified') || 
-            await guild.roles.create({ name: 'Verified', color: '#2ecc71' }).catch(() => null);
-
-        if (!unverifiedRole || !verifiedRole) {
-            return interaction.editReply({ content: '❌ Role deployment failed. Please check bot permissions.' });
-        }
-
-        let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
+        
+        let verifyChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'verify');
         if (!verifyChannel) {
-            verifyChannel = await guild.channels.create({
-                name: 'verify',
-                type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-                    { id: unverifiedRole.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] },
-                    { id: verifiedRole.id, deny: [PermissionFlagsBits.ViewChannel] }
-                ]
-            }).catch(() => null);
-        }
-
-        if (!verifyChannel) {
-            return interaction.editReply({ content: '❌ Error: Failed to generate the verification text channel.' });
-        }
-
-        const channels = guild.channels.cache;
-        for (const [id, channel] of channels) {
-            if (channel.id === verifyChannel.id) continue;
-            try {
-                if (channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice) {
-                    await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, Connect: false, Speak: false });
-                    await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, Connect: false, Speak: false });
-                    await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, Connect: true, Speak: true });
-                } else {
-                    await channel.permissionOverwrites.edit(guild.roles.everyone.id, { ViewChannel: false, SendMessages: false });
-                    await channel.permissionOverwrites.edit(unverifiedRole.id, { ViewChannel: false, SendMessages: false });
-                    await channel.permissionOverwrites.edit(verifiedRole.id, { ViewChannel: true, SendMessages: true });
-                }
-            } catch (err) {}
+            verifyChannel = await interaction.guild.channels.create({ name: 'verify', type: ChannelType.GuildText });
         }
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Get Code').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Verify Account').setStyle(ButtonStyle.Primary)
         );
 
         await verifyChannel.send({
-            content: `👋 **Welcome to the server!** Click the **Get Code** button below to receive your security verification challenge. Once verified, this channel will disappear and the server will unlock!`,
+            content: `**Ro-scanner**\n**Are you a human?**\n\nClick the verification button below, fill in your Roblox account name and complete the image check security layer to get verified.`,
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Automated Security Setup Successful! All channels are now dynamically locked.**` });
+        return interaction.editReply({ content: '✅ Verification gate deployed successfully!' });
     }
 
-    // Get Code Trigger
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         await interaction.deferReply({ ephemeral: true });
-
-        try {
-            const userId = interaction.user.id;
-            const challenge = generateSecurityChallenge(userId);
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter the code').setStyle(ButtonStyle.Success)
-            );
-
-            if (challenge.type === 'IMAGE_DISTORTED') {
-                return interaction.editReply({
-                    content: `🔒 **Verification Challenge (Distorted Engine)**\n\nLook closely at the canvas below. Find the 5-character amestecat code and submit it using the green button.`,
-                    files: [challenge.data],
-                    components: [row]
-                });
-            } else if (challenge.type === 'IMAGE_GEOMETRIC') {
-                return interaction.editReply({
-                    content: `🔒 **Verification Challenge (Camouflage Shape)**\n\nLook closely inside the colored element. Find the 5-character low-visibility code and submit it using the green button.`,
-                    files: [challenge.data],
-                    components: [row]
-                });
-            } else {
-                return interaction.editReply({
-                    content: `🔒 **Verification Challenge (Code Block)**\n\nYour security code is listed below:\n${challenge.data}\nClick the button underneath to submit it.`,
-                    components: [row]
-                });
-            }
-        } catch (error) {
-            console.error(error);
-            return interaction.editReply({ content: '❌ Internal security canvas error.' });
-        }
+        const challenge = generateSecurityChallenge(interaction.user.id);
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter Details').setStyle(ButtonStyle.Success)
+        );
+        return interaction.editReply({ content: '🔒 **Ro-Scanner Challenge Loaded:** Solve the security box below:', files: [challenge.data], components: [row] });
     }
 
     if (interaction.isButton() && interaction.customId === 'trigger_modal_input') {
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
-    if (interaction.isChatInputCommand() && interaction.commandName === 'verify') {
-        if (!userCaptchas.has(interaction.user.id)) {
-            return interaction.reply({ content: '❌ You haven\'t generated a code yet! Click **Get Code** first.', ephemeral: true });
-        }
-        return interaction.showModal(createVerificationModal()).catch(() => null);
-    }
-
-    // Scan Database Command
-    if (interaction.isChatInputCommand() && interaction.commandName === 'scan') {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Permission Denied: Administrator access required.', ephemeral: true });
-        }
-
-        await interaction.deferReply();
-        const blacklistedIds = getBlacklistSet();
-        const members = await interaction.guild.members.fetch();
-        let banCount = 0;
-        let safeCount = 0;
-
-        for (const [id, member] of members) {
-            if (member.user.bot) continue;
-            if (blacklistedIds.has(member.id)) {
-                try {
-                    await member.ban({ reason: 'Identified in local database file compilation.' });
-                    banCount++;
-                } catch (err) {}
-            } else {
-                safeCount++;
-            }
-        }
-        return interaction.editReply({ content: `🛡️ **Security Scan Complete!**\nValid/Safe Accounts: **${safeCount}**\nPurged Threats: **${banCount}**` });
-    }
-
-    // Lockdown Commands
-    if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'lockdown') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ No permission.', ephemeral: true });
-            LOCKDOWN_MODE = true;
-            return interaction.reply({ content: '🚨 **Lockdown Enabled!**' });
-        }
-        if (interaction.commandName === 'unlockdown') {
-            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ No permission.', ephemeral: true });
-            LOCKDOWN_MODE = false;
-            return interaction.reply({ content: '🛡️ **Lockdown Disabled.**' });
-        }
-    }
-
-    // ==========================================
-    // 7. POP-UP MODAL - STRICT LOCAL DATABASE CHECK (INCLUDES BannedGroups.txt)
-    // ==========================================
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
+        
         const userId = interaction.user.id;
+        const robloxUsername = interaction.fields.getTextInputValue('input_roblox_username').trim();
         const enteredCode = interaction.fields.getTextInputValue('input_captcha_field').trim();
         const correctCode = userCaptchas.get(userId);
 
-        if (!correctCode) {
-            return interaction.editReply({ content: '❌ Verification session expired. Please click **Get Code** again.' });
+        if (!correctCode || enteredCode.toUpperCase() !== correctCode.toUpperCase()) {
+            return interaction.editReply({ content: '❌ Incorrect captcha security token. Click Verify Account to try again.' });
         }
 
-        // Pasul A: Validare Cod Captcha
-        if (enteredCode.toUpperCase() === correctCode.toUpperCase()) {
-            userCaptchas.delete(userId); 
+        userCaptchas.delete(userId);
 
-            // Pasul B: Verificare în listele de text (Membri + BannedGroups.txt integrat local)
-            const strictBlacklist = getBlacklistSet();
-            
-            if (strictBlacklist.has(userId)) {
-                try {
-                    await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your account is flagged in our security database.`).catch(() => null);
-                    await interaction.member.kick('Auto-Kicked: ID matched a local security database entry.');
-                    console.log(`[SECURITY SCAN] Purged user ${interaction.user.tag} (Matched entry in local .txt files)`);
-                    return interaction.editReply({ content: '❌ Verification failed: Your account is flagged as unsafe.' });
-                } catch (kickErr) {
-                    return interaction.editReply({ content: '❌ Threat flagged, but bot failed to kick due to role hierarchy.' });
-                }
-            }
-
-            // Pasul C: Contul este sigur! Oferim rolurile și accesul complet
-            const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
-            const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
-
-            try {
-                if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
-                if (verifiedRole) await interaction.member.roles.add(verifiedRole);
-                
-                // Trimiterea mesajului de întâmpinare pe canalul general
-                const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general' && c.type === ChannelType.GuildText);
-                if (generalChannel) {
-                    await generalChannel.send(`🛡️ ${interaction.user} your account is safe. Welcome to the server!`).catch(() => null);
-                }
-
-                return interaction.editReply({ content: '✅ Verification successful! Welcome to the server!' });
-            } catch (roleError) {
-                return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** Drag the bot\'s role to the top of the list in Server Settings!' });
-            }
-        } else {
-            return interaction.editReply({ content: '❌ Invalid code! Click **Get Code** again.' });
-        }
-    }
-});
-
-// 8. Anti-raid kick on join
-client.on('guildMemberAdd', async (member) => {
-    if (member.user.bot) return; 
-    if (LOCKDOWN_MODE) {
+        // Pasul 1: Obținere ID utilizator după username din API-ul Roblox
+        let robloxId = null;
         try {
-            await member.send(`🚨 Lockdown Active.`).catch(() => null);
-            await member.kick('Lockdown Active');
-            return;
-        } catch (err) {}
+            const userRes = await axios.post('https://users.roblox.com/v1/users/search', {
+                keyword: robloxUsername,
+                limit: 1
+            });
+            if (userRes.data && userRes.data.data && userRes.data.data.length > 0) {
+                robloxId = userRes.data.data[0].id;
+            }
+        } catch (err) {
+            return interaction.editReply({ content: '❌ Communication failure with Roblox API. Check spelling.' });
+        }
+
+        if (!robloxId) {
+            return interaction.editReply({ content: '❌ Username target not found on Roblox platforms.' });
+        }
+
+        // Pasul 2: Scanarea în timp real a listei din BannedGroups.txt
+        let isBlacklisted = false;
+        try {
+            const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
+            if (groupRes.data && groupRes.data.data) {
+                const userGroups = groupRes.data.data.map(g => Number(g.group.id));
+                const bannedGroups = getBannedRobloxGroups();
+
+                // Verifică potrivirea exactă de ID de grup live
+                isBlacklisted = userGroups.some(id => bannedGroups.has(id));
+            }
+        } catch (err) {
+            console.error('Group Fetch Error:', err.message);
+        }
+
+        if (isBlacklisted) {
+            try {
+                await interaction.user.send(`❌ Kicked from **${interaction.guild.name}**: Your Roblox profile belongs to a blacklisted community line (${robloxUsername}).`).catch(() => null);
+                await interaction.member.kick('Auto-Kicked: Identified inside an illegal Roblox Group registry.');
+                return interaction.editReply({ content: '❌ Access Denied: Bound Roblox profile found in blacklisted databases!' });
+            } catch (err) {
+                return interaction.editReply({ content: '❌ Threat isolated, but role hierarchy restricted bot expulsion action.' });
+            }
+        }
+
+        // Succes: Utilizatorul trece protecția
+        const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
+        const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
+
+        try {
+            if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
+            if (verifiedRole) await interaction.member.roles.add(verifiedRole);
+            
+            const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general');
+            if (generalChannel) {
+                await generalChannel.send(`🛡️ ${interaction.user} verified successfully (Roblox: \`${robloxUsername}\`). Safe account check passed.`);
+            }
+            return interaction.editReply({ content: '✅ Verification complete. Welcome!' });
+        } catch (err) {
+            return interaction.editReply({ content: '❌ Setup configuration error: Ensure bot role is set to highest hierarchy position.' });
+        }
     }
-    const unverifiedRole = member.guild.roles.cache.find(r => r.name === 'UnVerified');
-    if (unverifiedRole) await member.roles.add(unverifiedRole).catch(() => null);
 });
 
 client.login(process.env.DISCORD_TOKEN);
