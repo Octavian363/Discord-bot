@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Auto-Scan on Join Engine) Online on Railway!\n');
+   res.end('Global Security Shield (Verify Post-Captcha Engine) Online on Railway!\n');
 }).listen(port, () => {
    console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
@@ -68,7 +68,7 @@ const TXT_BAN_FILES = [
     'user_ids.txt'
 ];
 
-// Funcție ajutătoare pentru a încărca toate ID-urile din fișierele txt și grupuri într-un Set
+// Helper to compile the blacklist set
 function getBlacklistSet() {
     const blacklistedIds = new Set();
     TXT_BAN_FILES.forEach(fileName => {
@@ -310,10 +310,6 @@ client.on('interactionCreate', async (interaction) => {
     // 2. GET CODE BUTTON TRIGGER
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
-        if (interaction.member.roles.cache.some(r => r.name === 'Verified')) {
-            return interaction.reply({ content: '✅ You are already fully verified!', ephemeral: true });
-        }
-
         await interaction.deferReply({ ephemeral: true });
 
         try {
@@ -352,9 +348,6 @@ client.on('interactionCreate', async (interaction) => {
     // 3. ENTER THE CODE BUTTON TRIGGER
     // ==========================================
     if (interaction.isButton() && interaction.customId === 'trigger_modal_input') {
-        if (interaction.member.roles.cache.some(r => r.name === 'Verified')) {
-            return interaction.reply({ content: '✅ You are already verified!', ephemeral: true });
-        }
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
@@ -362,9 +355,6 @@ client.on('interactionCreate', async (interaction) => {
     // 4. /VERIFY SLASH COMMAND
     // ==========================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'verify') {
-        if (interaction.member.roles.cache.some(r => r.name === 'Verified')) {
-            return interaction.reply({ content: '✅ You are already verified and have full access!', ephemeral: true });
-        }
         if (!userCaptchas.has(interaction.user.id)) {
             return interaction.reply({ content: '❌ You haven\'t generated a code yet! Click **Get Code** first.', ephemeral: true });
         }
@@ -428,7 +418,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 7. POP-UP MODAL CODE VALIDATION
+    // 7. POP-UP MODAL CODE VALIDATION (CRITICAL LOGIC)
     // ==========================================
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
@@ -440,9 +430,24 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Verification session expired. Please click **Get Code** again.' });
         }
 
+        // Pasul 1: Verificăm dacă codul Captcha este corect
         if (enteredCode.toUpperCase() === correctCode.toUpperCase()) {
             userCaptchas.delete(userId); 
 
+            // Pasul 2: Verificăm imediat dacă utilizatorul este sigur în baza de date
+            const blacklistedIds = getBlacklistSet();
+
+            if (blacklistedIds.has(userId)) {
+                try {
+                    await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your account was flagged in our security database.`).catch(() => null);
+                    await interaction.member.kick('Auto-Kicked: Flagged in global security blacklist database during verification.');
+                    return interaction.editReply({ content: '❌ Verification failed: Your account is flagged as unsafe.' });
+                } catch (kickErr) {
+                    return interaction.editReply({ content: '❌ Unsafe account detected, but bot failed to kick due to role hierarchy.' });
+                }
+            }
+
+            // Pasul 3: Contul este sigur! Oferim rolurile
             const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
             const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
 
@@ -450,13 +455,13 @@ client.on('interactionCreate', async (interaction) => {
                 if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole);
                 
-                // Trimitem mesajul și pe general dacă finalizează manual un captcha vechi, opțional
+                // Trimitem mesajul de întâmpinare pe canalul general
                 const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general' && c.type === ChannelType.GuildText);
                 if (generalChannel) {
                     await generalChannel.send(`🛡️ ${interaction.user} your account is safe. Welcome to the server!`).catch(() => null);
                 }
 
-                return interaction.editReply({ content: '✅ Verification successful! Full access granted.' });
+                return interaction.editReply({ content: '✅ Verification successful! Welcome!' });
             } catch (roleError) {
                 return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** Drag the bot\'s role to the top of the list in Server Settings!' });
             }
@@ -467,12 +472,11 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// 8. 🛡️ AUTOMATIC SCAN ON MEMBER JOIN
+// 8. ANTI-RAID KICK ON JOIN (Puts UnVerified role)
 // ==========================================
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return; 
 
-    // Dacă serverul este în modul Lockdown total
     if (LOCKDOWN_MODE) {
         try {
             await member.send(`🚨 **Security Alert:** You have been kicked from **${member.guild.name}** due to emergency lockdown.`).catch(() => null);
@@ -481,36 +485,8 @@ client.on('guildMemberAdd', async (member) => {
         } catch (err) {}
     }
 
-    // Încărcăm listele negre dinamice
-    const blacklistedIds = getBlacklistSet();
-
-    // SCENARIUL A: Utilizatorul NU este sigur (se află pe liste sau grupuri rele)
-    if (blacklistedIds.has(member.id)) {
-        try {
-            await member.send(`❌ You have been kicked from **${member.guild.name}** because your account was flagged in our security database.`).catch(() => null);
-            await member.kick('Auto-Kicked: Flagged in global security blacklist database on join.');
-            console.log(`[SECURITY] Kicked flagged user on join: ${member.user.tag} (${member.id})`);
-        } catch (err) {
-            console.error(`Failed to auto-kick unsafe user ${member.user.tag}:`, err.message);
-        }
-        return; // Oprim execuția aici pentru acest utilizator rău
-    }
-
-    // SCENARIUL B: Utilizatorul ESTE SIGUR
-    console.log(`[SECURITY] Safe user joined: ${member.user.tag} (${member.id})`);
-    
-    // Oferim rolul de Verified direct pentru că a trecut testul listei negre
-    const verifiedRole = member.guild.roles.cache.find(r => r.name === 'Verified');
-    if (verifiedRole) {
-        await member.roles.add(verifiedRole).catch(() => null);
-    }
-
-    // Trimitem mesajul automat pe canalul public numit "general"
-    const generalChannel = member.guild.channels.cache.find(c => c.name.toLowerCase() === 'general' && c.type === ChannelType.GuildText);
-    if (generalChannel) {
-        // Trimite mesajul cerut menționând utilizatorul direct
-        await generalChannel.send(`🛡️ ${member.user} your account is safe. Welcome to the server!`).catch(() => null);
-    }
+    const unverifiedRole = member.guild.roles.cache.find(r => r.name === 'UnVerified');
+    if (unverifiedRole) await member.roles.add(unverifiedRole).catch(() => null);
 });
 
 client.login(process.env.DISCORD_TOKEN);
