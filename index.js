@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Ro-Scanner (Proxy Enabled Production Build) Online!\n');
+   res.end('Ro-Scanner (Custom Role Auth Build) Online!\n');
 }).listen(port, () => {
    console.log(`[SERVER] Running on port ${port}.`);
 });
@@ -45,6 +45,14 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false;
 
+// 👑 CUSTOM AUTHORIZED ADMIN ROLE CONFIGURATION
+const AUTHORIZED_ADMIN_ROLE_ID = '1521550962945163575';
+
+// Helper function to validate if a member is authorized to run commands
+function isUserAuthorized(member) {
+    return member.permissions.has(PermissionFlagsBits.Administrator) || member.roles.cache.has(AUTHORIZED_ADMIN_ROLE_ID);
+}
+
 // Extract purely numeric Group IDs from BannedGroups.txt safely
 function getBannedRobloxGroups() {
     const bannedGroups = new Set();
@@ -54,7 +62,7 @@ function getBannedRobloxGroups() {
             const content = fs.readFileSync(filePath, 'utf-8');
             content.split(/\r?\n/).forEach(line => {
                 const trimmed = line.trim();
-                const idOnly = trimmed.replace(/\D/g, ''); // Removes metadata cleanly
+                const idOnly = trimmed.replace(/\D/g, ''); 
                 if (idOnly) bannedGroups.add(Number(idOnly));
             });
         } catch (err) {
@@ -188,8 +196,8 @@ client.on('interactionCreate', async (interaction) => {
     
     // 1. /SETUP COMMAND
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Access Denied: Administrator security clearance required.', ephemeral: true });
+        if (!isUserAuthorized(interaction.member)) {
+            return interaction.reply({ content: '❌ Access Denied: Administrator security clearance or authorized role required.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
@@ -222,7 +230,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Structural error: Failed to generate standard text validation channel.' });
         }
 
-        // Hide channels from unverified users
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
@@ -286,29 +293,48 @@ client.on('interactionCreate', async (interaction) => {
 
         userCaptchas.delete(userId);
 
-        // ✅ FIXED PATHWAY ENDPOINT HERE:
         let robloxId = null;
         try {
-            const userRes = await axios.post('https://users.roproxy.com/v1/usernames/users', {
-                usernames: [robloxUsername],
-                excludeBannedUsers: false
+            const userRes = await axios.get(`https://api.hyra.io/users/roblox`, {
+                params: { username: robloxUsername },
+                headers: { 'User-Agent': 'Mozilla/5.0 RoScanner/2.0' }
             });
-            if (userRes.data && userRes.data.data && userRes.data.data.length > 0) {
-                robloxId = userRes.data.data[0].id;
+            if (userRes.data && userRes.data.id) {
+                robloxId = userRes.data.id;
             }
         } catch (err) {
-            console.error('Proxy Username Fetch Error:', err.message);
-            return interaction.editReply({ content: '❌ Communication failure with Roblox API proxy routing layer. Please try again.' });
+            console.warn('Primary lookup via Hyra developer bridge throttled. Triggering safe fallback route...');
+            
+            try {
+                const fallbackRes = await axios.post('https://users.roproxy.com/v1/usernames/users', {
+                    usernames: [robloxUsername],
+                    excludeBannedUsers: false
+                }, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (fallbackRes.data && fallbackRes.data.data && fallbackRes.data.data.length > 0) {
+                    robloxId = fallbackRes.data.data[0].id;
+                }
+            } catch (fallbackErr) {
+                console.error('Critical: Redundant API networks failed to resolve username:', fallbackErr.message);
+                return interaction.editReply({ content: '❌ Communication failure with the Roblox network gateways. Please try again later.' });
+            }
         }
 
         if (!robloxId) {
             return interaction.editReply({ content: '❌ The specified Roblox profile could not be found. Check your spelling.' });
         }
 
-        // Live group scanning check utilizing roproxy network tunnels
         let isBlacklisted = false;
         try {
-            const groupRes = await axios.get(`https://groups.roproxy.com/v1/users/${robloxId}/groups/roles`);
+            const groupRes = await axios.get(`https://groups.roproxy.com/v1/users/${robloxId}/groups/roles`, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
             if (groupRes.data && groupRes.data.data) {
                 const userGroups = groupRes.data.data.map(g => Number(g.group.id));
                 const bannedGroups = getBannedRobloxGroups();
@@ -328,7 +354,6 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // Pass validation successfully
         const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
         const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
 
@@ -348,8 +373,8 @@ client.on('interactionCreate', async (interaction) => {
 
     // 5. UTILITY ADMINISTRATIVE COMMANDS
     if (interaction.isChatInputCommand()) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Error: Administrative permissions required.', ephemeral: true });
+        if (!isUserAuthorized(interaction.member)) {
+            return interaction.reply({ content: '❌ Access Denied: Administrator security clearance or authorized role required.', ephemeral: true });
         }
 
         if (interaction.commandName === 'scan') {
