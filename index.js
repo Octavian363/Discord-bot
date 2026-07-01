@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Hybrid 65/30/5 Engine) Online on Railway!\n');
+   res.end('Global Security Shield (Auto-Scan on Join Engine) Online on Railway!\n');
 }).listen(port, () => {
    console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
@@ -31,7 +31,7 @@ const { createCanvas, registerFont } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
-// Register local font to fix the empty squares (tofu blocks)
+// Register local font to fix the empty squares
 try {
     registerFont('./captcha-font.ttf', { family: 'CaptchaFont' });
     console.log('✅ Local font "captcha-font.ttf" registered successfully.');
@@ -68,6 +68,27 @@ const TXT_BAN_FILES = [
     'user_ids.txt'
 ];
 
+// Funcție ajutătoare pentru a încărca toate ID-urile din fișierele txt și grupuri într-un Set
+function getBlacklistSet() {
+    const blacklistedIds = new Set();
+    TXT_BAN_FILES.forEach(fileName => {
+        const filePath = path.join(__dirname, fileName);
+        if (fs.existsSync(filePath)) {
+            try {
+                const content = fs.readFileSync(filePath, 'utf-8');
+                content.split(/\r?\n/).forEach(line => {
+                    const trimmed = line.trim();
+                    if (trimmed) blacklistedIds.add(trimmed);
+                });
+            } catch (err) {
+                console.error(`Error reading ${fileName}:`, err.message);
+            }
+        }
+    });
+    BLACKLISTED_ROBLOX_GROUPS.forEach(id => blacklistedIds.add(String(id).trim()));
+    return blacklistedIds;
+}
+
 // 🎯 HYBRID CAPTCHA GENERATOR ENGINE (65% Distorted Box / 30% Geometric Camouflage / 5% Text Only)
 function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
@@ -79,9 +100,6 @@ function generateSecurityChallenge(userId) {
 
     const percentageRoll = Math.random();
 
-    // ==========================================================
-    // TIPUL 1 (65% Șanse): Text amestecat, rotit, distorsionat cu linii de camuflaj
-    // ==========================================================
     if (percentageRoll < 0.65) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
@@ -97,7 +115,6 @@ function generateSecurityChallenge(userId) {
         ctx.fillStyle = color.bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Linii distorsionate suprapuse peste text
         ctx.strokeStyle = color.text;
         ctx.lineWidth = 3;
         for (let i = 0; i < 7; i++) {
@@ -133,22 +150,18 @@ function generateSecurityChallenge(userId) {
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
         return { type: 'IMAGE_DISTORTED', data: attachment };
     } 
-    // ==========================================================
-    // TIPUL 2 (30% Șanse): Stilul geometric curat (Dreptunghi verde / Cerc albastru) camuflat
-    // ==========================================================
     else if (percentageRoll < 0.95) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
         
-        // Fundal alb exterior general
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         const shapeType = Math.floor(Math.random() * 2);
         
         const camouflagePalettes = [
-            { shape: '#00FF44', text: '#00EA3B' }, // Verdele strălucitor (DZ8N2 style)
-            { shape: '#0044FF', text: '#0036E6' }, // Cercul albastru original (USG68 style)
+            { shape: '#00FF44', text: '#00EA3B' }, 
+            { shape: '#0044FF', text: '#0036E6' }, 
             { shape: '#FF2222', text: '#FF0000' }, 
             { shape: '#FFB700', text: '#F0AA00' }  
         ];
@@ -157,12 +170,10 @@ function generateSecurityChallenge(userId) {
         ctx.fillStyle = palette.shape;
 
         if (shapeType === 0) {
-            // Cercul camuflat curat
             ctx.beginPath();
             ctx.arc(250, 125, 95, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            // Dreptunghiul interior curat (Stilul verde)
             ctx.fillRect(100, 50, 300, 150);
         }
 
@@ -180,9 +191,6 @@ function generateSecurityChallenge(userId) {
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
         return { type: 'IMAGE_GEOMETRIC', data: attachment };
     } 
-    // ==========================================================
-    // TIPUL 3 (5% Șanse): Doar text în bloc de cod (Fără nicio imagine)
-    // ==========================================================
     else {
         const textDisplay = `\`\`\`\nCODE: ${code}\n\`\`\``;
         return { type: 'TEXT', data: textDisplay };
@@ -364,7 +372,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 5. /SCAN GLOBAL COMMAND (PUBLIC CHAT OUTPUT)
+    // 5. /SCAN GLOBAL COMMAND
     // ==========================================
     if (interaction.isChatInputCommand() && interaction.commandName === 'scan') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -372,25 +380,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         await interaction.deferReply();
-
-        const blacklistedIds = new Set();
-
-        TXT_BAN_FILES.forEach(fileName => {
-            const filePath = path.join(__dirname, fileName);
-            if (fs.existsSync(filePath)) {
-                try {
-                    const content = fs.readFileSync(filePath, 'utf-8');
-                    content.split(/\r?\n/).forEach(line => {
-                        const trimmed = line.trim();
-                        if (trimmed) blacklistedIds.add(trimmed);
-                    });
-                } catch (readErr) {
-                    console.error(`Error reading database file ${fileName}:`, readErr.message);
-                }
-            }
-        });
-
-        BLACKLISTED_ROBLOX_GROUPS.forEach(id => blacklistedIds.add(String(id).trim()));
+        const blacklistedIds = getBlacklistSet();
 
         const members = await interaction.guild.members.fetch();
         let banCount = 0;
@@ -460,6 +450,12 @@ client.on('interactionCreate', async (interaction) => {
                 if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole);
                 
+                // Trimitem mesajul și pe general dacă finalizează manual un captcha vechi, opțional
+                const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general' && c.type === ChannelType.GuildText);
+                if (generalChannel) {
+                    await generalChannel.send(`🛡️ ${interaction.user} your account is safe. Welcome to the server!`).catch(() => null);
+                }
+
                 return interaction.editReply({ content: '✅ Verification successful! Full access granted.' });
             } catch (roleError) {
                 return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** Drag the bot\'s role to the top of the list in Server Settings!' });
@@ -471,11 +467,12 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // ==========================================
-// 8. ANTI-RAID KICK ON JOIN
+// 8. 🛡️ AUTOMATIC SCAN ON MEMBER JOIN
 // ==========================================
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return; 
 
+    // Dacă serverul este în modul Lockdown total
     if (LOCKDOWN_MODE) {
         try {
             await member.send(`🚨 **Security Alert:** You have been kicked from **${member.guild.name}** due to emergency lockdown.`).catch(() => null);
@@ -484,8 +481,36 @@ client.on('guildMemberAdd', async (member) => {
         } catch (err) {}
     }
 
-    const unverifiedRole = member.guild.roles.cache.find(r => r.name === 'UnVerified');
-    if (unverifiedRole) await member.roles.add(unverifiedRole).catch(() => null);
+    // Încărcăm listele negre dinamice
+    const blacklistedIds = getBlacklistSet();
+
+    // SCENARIUL A: Utilizatorul NU este sigur (se află pe liste sau grupuri rele)
+    if (blacklistedIds.has(member.id)) {
+        try {
+            await member.send(`❌ You have been kicked from **${member.guild.name}** because your account was flagged in our security database.`).catch(() => null);
+            await member.kick('Auto-Kicked: Flagged in global security blacklist database on join.');
+            console.log(`[SECURITY] Kicked flagged user on join: ${member.user.tag} (${member.id})`);
+        } catch (err) {
+            console.error(`Failed to auto-kick unsafe user ${member.user.tag}:`, err.message);
+        }
+        return; // Oprim execuția aici pentru acest utilizator rău
+    }
+
+    // SCENARIUL B: Utilizatorul ESTE SIGUR
+    console.log(`[SECURITY] Safe user joined: ${member.user.tag} (${member.id})`);
+    
+    // Oferim rolul de Verified direct pentru că a trecut testul listei negre
+    const verifiedRole = member.guild.roles.cache.find(r => r.name === 'Verified');
+    if (verifiedRole) {
+        await member.roles.add(verifiedRole).catch(() => null);
+    }
+
+    // Trimitem mesajul automat pe canalul public numit "general"
+    const generalChannel = member.guild.channels.cache.find(c => c.name.toLowerCase() === 'general' && c.type === ChannelType.GuildText);
+    if (generalChannel) {
+        // Trimite mesajul cerut menționând utilizatorul direct
+        await generalChannel.send(`🛡️ ${member.user} your account is safe. Welcome to the server!`).catch(() => null);
+    }
 });
 
 client.login(process.env.DISCORD_TOKEN);
