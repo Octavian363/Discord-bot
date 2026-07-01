@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Ro-Scanner (Fixed Layout & Separate Lockdown) Online!\n');
+   res.end('Ro-Scanner (Stable Roblox API Integration) Online!\n');
 }).listen(port, () => {
    console.log(`[SERVER] Running on port ${port}.`);
 });
@@ -45,7 +45,7 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false;
 
-// Extrage strict ID-urile de grupuri din BannedGroups.txt
+// Extract purely numeric Group IDs from BannedGroups.txt safely 
 function getBannedRobloxGroups() {
     const bannedGroups = new Set();
     const filePath = path.join(__dirname, 'BannedGroups.txt');
@@ -54,7 +54,7 @@ function getBannedRobloxGroups() {
             const content = fs.readFileSync(filePath, 'utf-8');
             content.split(/\r?\n/).forEach(line => {
                 const trimmed = line.trim();
-                const idOnly = trimmed.replace(/\D/g, ''); // Elimină [cite: 2]
+                const idOnly = trimmed.replace(/\D/g, ''); // Removes source metadata cleanly 
                 if (idOnly) bannedGroups.add(Number(idOnly));
             });
         } catch (err) {
@@ -64,7 +64,7 @@ function getBannedRobloxGroups() {
     return bannedGroups;
 }
 
-// Generator Captcha cu 3 stiluri (Albastru Cerc, Verde Dreptunghi, Roșu Linii)
+// Dynamic Captcha Generator with 3 unique visual presets
 function generateSecurityChallenge(userId) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
     let code = '';
@@ -80,7 +80,7 @@ function generateSecurityChallenge(userId) {
     const styleRoll = Math.random();
 
     if (styleRoll < 0.34) {
-        // STILUL 1: Cerc Albastru (USG68)
+        // STYLE 1: Blue Circle Backdrop
         ctx.fillStyle = '#0044FF'; 
         ctx.beginPath();
         ctx.arc(300, 150, 120, 0, Math.PI * 2);
@@ -93,7 +93,7 @@ function generateSecurityChallenge(userId) {
         ctx.fillText(code, 300, 150);
 
     } else if (styleRoll < 0.67) {
-        // STILUL 2: Dreptunghi Verde (DZ8N2)
+        // STYLE 2: Green Solid Background Box
         ctx.fillStyle = '#00FF44'; 
         ctx.fillRect(100, 50, 400, 200);
 
@@ -104,7 +104,7 @@ function generateSecurityChallenge(userId) {
         ctx.fillText(code, 300, 150);
 
     } else {
-        // STILUL 3: Cutie Roșie cu Linii (4JP39)
+        // STYLE 3: Distorted Red Camouflage Box
         ctx.fillStyle = '#FF2222'; 
         ctx.fillRect(30, 30, 540, 240);
 
@@ -136,7 +136,7 @@ function generateSecurityChallenge(userId) {
     return { data: attachment };
 }
 
-// Pop-up-ul curat care nu mai blochează chat-ul
+// Exact Modal matching Ro-scanner's core presentation layout
 function createVerificationModal() {
     const modal = new ModalBuilder()
         .setCustomId('modal_captcha_submit')
@@ -162,34 +162,34 @@ function createVerificationModal() {
     );
 }
 
-// 🌐 ÎNREGISTRAREA COMPLETĂ A TUTUROR COMENZILOR
+// 🌐 AUTOMATIC SLASH COMMAND GLOBAL SYNCHRONIZATION
 client.once('ready', async () => {
-    console.log(`🤖 Botul ${client.user.tag} este activat și pregătit!`);
+    console.log(`🤖 Bot account ${client.user.tag} initialized in production environment!`);
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
-            { name: 'setup', description: 'Generează automat rolurile necesare, canalul #verify și panoul securizat.' },
-            { name: 'scan', description: 'Scanează serverul împotriva listei de grupuri interzise din BannedGroups.txt.' },
-            { name: 'lockdown', description: 'Activează modul de urgență. Oricine intră primește kick instant.' },
-            { name: 'unlockdown', description: 'Dezactivează modul de urgență și permite verificarea normală.' }
+            { name: 'setup', description: 'Automatically deploys required server roles and the secure verification portal.' },
+            { name: 'scan', description: 'Scans existing server members against local database records.' },
+            { name: 'lockdown', description: 'Enables anti-raid emergency protection. Instantly kicks new arrivals.' },
+            { name: 'unlockdown', description: 'Disables emergency protection measures, returning to standard verification.' }
         ];
 
         await axios.put(`https://discord.com/api/v10/applications/${appId}/commands`, commandData, {
             headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' }
         });
-        console.log('✅ Toate comenzile slash au fost sincronizate cu succes în API Discord.');
+        console.log('✅ Global slash operations synced cleanly with Discord API instances.');
     } catch (error) {
-        console.error('❌ Eșec la sincronizarea comenzilor slash:', error.message);
+        console.error('❌ Application command mapping error:', error.message);
     }
 });
 
-// 🚀 LOGICA DE INTERACȚIUNI
+// 🚀 CORE INTERACTION GATEWAY
 client.on('interactionCreate', async (interaction) => {
     
-    // 1. COMANDA /SETUP
+    // 1. /SETUP ENGINE
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Acces Refuzat: Ai nevoie de permisiuni de Administrator.', ephemeral: true });
+            return interaction.reply({ content: '❌ Access Denied: Administrator security clearance required.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
@@ -202,7 +202,7 @@ client.on('interactionCreate', async (interaction) => {
             await guild.roles.create({ name: 'Verified', color: '#2ecc71' }).catch(() => null);
 
         if (!unverifiedRole || !verifiedRole) {
-            return interaction.editReply({ content: '❌ Nu am putut genera rolurile automate. Verifică ierarhia botului!' });
+            return interaction.editReply({ content: '❌ Role configuration failure. Please check the bot\'s priority hierarchy levels.' });
         }
 
         let verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase() === 'verify' && c.type === ChannelType.GuildText);
@@ -219,10 +219,10 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (!verifyChannel) {
-            return interaction.editReply({ content: '❌ Nu am putut genera canalul text de verificare.' });
+            return interaction.editReply({ content: '❌ Structural error: Failed to generate standard text validation channel.' });
         }
 
-        // Securizarea celorlalte canale
+        // Apply fallback overrides to clear remaining channel layouts
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
@@ -234,18 +234,18 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Verify').setStyle(ButtonStyle.Success)
+            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Verify Account').setStyle(ButtonStyle.Success)
         );
 
         await verifyChannel.send({
-            content: `**Ro-scanner**\n**Are you a human?**\n\n👋 Pentru a debloca restul canalelor, apasă pe butonul verde de mai jos și rezolvă testul de securitate CAPTCHA.`,
+            content: `**Ro-scanner**\n**Are you a human?**\n\n👋 Welcome! To reveal the community channels, click the green button below, supply your Roblox username, and complete the security canvas layer.`,
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Setup-ul Automat a Reușit!** Canalele au fost securizate.` });
+        return interaction.editReply({ content: `✅ **Automated System Gateway Built Successfully!**` });
     }
 
-    // 2. APĂSARE BUTON VERIFY (Trimite imaginea + butonul secundar fără să blocheze API-ul)
+    // 2. STAGE 1 VERIFICATION BUTTON CLICK
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         try {
             const challenge = generateSecurityChallenge(interaction.user.id);
@@ -254,25 +254,25 @@ client.on('interactionCreate', async (interaction) => {
                 new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter Details').setStyle(ButtonStyle.Primary)
             );
 
-            // Pasul 1: Trimitem doar imaginea și butonul (FĂRĂ showModal direct aici)
+            // Responding with an interaction component message first keeps the API from locking up
             return await interaction.reply({
-                content: `🔒 **Ro-Scanner Challenge:** Privește cu atenție codul din imaginea de mai jos, apoi apasă pe butonul albastru **"Enter Details"** pentru a-l introduce alături de numele tău de Roblox:`,
+                content: `🔒 **Ro-Scanner Challenge:** Examine the security block closely, then select the blue **"Enter Details"** button to type the answer along with your user tag:`,
                 files: [challenge.data],
                 components: [row],
                 ephemeral: true
             });
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: '❌ Eroare internă la procesarea imaginii.', ephemeral: true });
+            return interaction.reply({ content: '❌ System canvas handling fault. Please try again.', ephemeral: true });
         }
     }
 
-    // 3. APĂSARE PE „ENTER DETAILS” (Afișează pop-up-ul perfect curat)
+    // 3. STAGE 2 FORM TRIGGER (Pops modal gracefully without interaction overlap)
     if (interaction.isButton() && interaction.customId === 'trigger_modal_input') {
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
-    // 4. VALIDARE POP-UP MODAL (Verificare live Roblox)
+    // 4. FINAL VALIDATION SCAN (Featuring stable Multi-Username API endpoint)
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -282,27 +282,31 @@ client.on('interactionCreate', async (interaction) => {
         const correctCode = userCaptchas.get(userId);
 
         if (!correctCode || enteredCode.toUpperCase() !== correctCode.toUpperCase()) {
-            return interaction.editReply({ content: '❌ Cod invalid sau sesiune expirată! Apasă din nou pe **Verify**.' });
+            return interaction.editReply({ content: '❌ Incorrect challenge token solution or session expired. Please restart.' });
         }
 
         userCaptchas.delete(userId);
 
-        // API Căutare ID Roblox după Username
+        // STABLE UPGRADE: Precise Multi-Username Roblox Profiler API Lookup
         let robloxId = null;
         try {
-            const userRes = await axios.post('https://users.roblox.com/v1/users/search', { keyword: robloxUsername, limit: 1 });
+            const userRes = await axios.post('https://users.roblox.com/v1/users/by-usernames', {
+                usernames: [robloxUsername],
+                excludeBannedUsers: false
+            });
             if (userRes.data && userRes.data.data && userRes.data.data.length > 0) {
                 robloxId = userRes.data.data[0].id;
             }
         } catch (err) {
-            return interaction.editReply({ content: '❌ Eșec la comunicarea cu API-ul Roblox.' });
+            console.error('Roblox Username Resolution Fault:', err.message);
+            return interaction.editReply({ content: '❌ Communication failure with Roblox API. Try again in a minute.' });
         }
 
         if (!robloxId) {
-            return interaction.editReply({ content: '❌ Acest cont de Roblox nu există.' });
+            return interaction.editReply({ content: '❌ The specified Roblox profile could not be found. Check your spelling.' });
         }
 
-        // API Scanare Grupuri live
+        // Live group mapping check via verified ID indices
         let isBlacklisted = false;
         try {
             const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
@@ -312,20 +316,20 @@ client.on('interactionCreate', async (interaction) => {
                 isBlacklisted = userGroups.some(id => bannedGroups.has(id));
             }
         } catch (err) {
-            console.error(err);
+            console.error('Roblox Group Mapping Fetch Fault:', err.message);
         }
 
         if (isBlacklisted) {
             try {
-                await interaction.user.send(`❌ Ai primit kick din **${interaction.guild.name}** deoarece contul tău de Roblox (${robloxUsername}) se află într-un grup interzis.`).catch(() => null);
-                await interaction.member.kick('Auto-Kicked: Flagged Roblox Group.');
-                return interaction.editReply({ content: '❌ Acces Refuzat: Te afli într-un grup periculos!' });
+                await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your Roblox profile (\`${robloxUsername}\`) is found within a restricted community list.`).catch(() => null);
+                await interaction.member.kick('Auto-Kicked via Ro-Scanner: Restricted Roblox Group Connection Found.');
+                return interaction.editReply({ content: '❌ Access Denied: Associated Roblox credentials flagged in security blacklist databases!' });
             } catch (err) {
-                return interaction.editReply({ content: '❌ Ai fost detectat în grup, dar ierarhia botului a oprit acțiunea de kick.' });
+                return interaction.editReply({ content: '❌ Flagged asset isolated, but role priority prevented kick sequence.' });
             }
         }
 
-        // Totul e sigur, acordăm rolurile
+        // Account clean, deploy target roles
         const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
         const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
 
@@ -335,18 +339,18 @@ client.on('interactionCreate', async (interaction) => {
             
             const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general');
             if (generalChannel) {
-                await generalChannel.send(`🛡️ ${interaction.user} s-a verificat cu succes! (Roblox: \`${robloxUsername}\`)`);
+                await generalChannel.send(`🛡️ ${interaction.user} cleared registration checks successfully! (Roblox: \`${robloxUsername}\`)`);
             }
-            return interaction.editReply({ content: '✅ Verificare reușită! Canalele au fost deblocate.' });
+            return interaction.editReply({ content: '✅ Verification successful! Server paths have been unlocked.' });
         } catch (err) {
-            return interaction.editReply({ content: '❌ Eroare de ierarhie la acordarea rolurilor.' });
+            return interaction.editReply({ content: '❌ Structural error applying verified identity states.' });
         }
     }
 
-    // 5. GESTIONARE COMANZI AUXILIARE (SCAN, LOCKDOWN ȘI UNLOCKDOWN)
+    // 5. UTILITY MANAGEMENT PATHS (SCAN & LOCKDOWN SETS)
     if (interaction.isChatInputCommand()) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: '❌ Fără permisiune.', ephemeral: true });
+            return interaction.reply({ content: '❌ Error: Administrative permissions required.', ephemeral: true });
         }
 
         if (interaction.commandName === 'scan') {
@@ -354,30 +358,28 @@ client.on('interactionCreate', async (interaction) => {
             const members = await interaction.guild.members.fetch();
             let safeCount = 0;
             for (const [id, member] of members) { if (!member.user.bot) safeCount++; }
-            return interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Purged: 0`);
+            return interaction.editReply(`📊 **Security Scan Complete!**\n✅ Valid/Safe Accounts: ${safeCount}\n🔨 Purged Threats: 0`);
         }
 
-        // Comandă separată pentru activare LOCKDOWN
         if (interaction.commandName === 'lockdown') {
             LOCKDOWN_MODE = true;
-            return interaction.reply(`🚨 **Emergency LOCKDOWN**: **ACTIVAT**. Utilizatorii noi primesc kick instant la intrare.`);
+            return interaction.reply(`🚨 **Emergency LOCKDOWN**: **ENABLED**. All incoming standard accounts will be dropped directly on join.`);
         }
 
-        // Comandă separată pentru oprire LOCKDOWN (/unlockdown)
         if (interaction.commandName === 'unlockdown') {
             LOCKDOWN_MODE = false;
-            return interaction.reply(`🛡️ **Emergency LOCKDOWN**: **DEACTIVAT**. Serverul a revenit la starea normală.`);
+            return interaction.reply(`🛡️ **Emergency LOCKDOWN**: **DISABLED**. Server gateway entry parameters normalized.`);
         }
     }
 });
 
-// Eveniment anti-raid pe join
+// Structural Anti-Raid Gate
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return;
     if (LOCKDOWN_MODE) {
         try {
-            await member.send(`🚨 Modul Lockdown este activ pe acest server. Ai primit kick automat ca măsură de protecție.`).catch(() => null);
-            await member.kick('Lockdown activat de admini.');
+            await member.send(`🚨 Emergency Lockdown is currently active on **${member.guild.name}**. Entry denied temporarily.`).catch(() => null);
+            await member.kick('Active server incident response protocol.');
             return;
         } catch (err) {}
     }
