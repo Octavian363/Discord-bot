@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Global Security Shield (Discord Connections Only) Online on Railway!\n');
+   res.end('Global Security Shield (Strict Database Scan via BannedGroups.txt) Online!\n');
 }).listen(port, () => {
    console.log(`[RAILWAY/SERVER] Keep-alive web server running on port ${port}.`);
 });
@@ -26,7 +26,6 @@ const {
     TextInputStyle,
     AttachmentBuilder
 } = require('discord.js');
-const axios = require('axios');
 const { createCanvas, registerFont } = require('canvas');
 const fs = require('fs');
 const path = require('path');
@@ -52,20 +51,13 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false; 
 
-// 🔴 THE 28 BLACKLISTED ROBLOX GROUPS LIST
-const BLACKLISTED_ROBLOX_GROUPS = [
-    33245612, 16482991, 15900234, 32441109, 17234901, 11400562, 34001922,
-    15501928, 32991023, 12004958, 16772019, 33110294, 14920193, 11002938,
-    10992384, 33456129, 15110293, 16220394, 32881029, 14772019, 12334950,
-    33881029, 15440293, 16992039, 32110293, 14220394, 11882938, 33661029
-];
-
 // Database text files containing blacklisted IDs to scan against
 const TXT_BAN_FILES = [
     'Beat Banger Members.txt',
     'Bun fan members.txt',
     'FelinoMembers.txt',
-    'user_ids.txt'
+    'user_ids.txt',
+    'BannedGroups.txt' // <--- Noul tău fișier integrat direct în motorul de scanare
 ];
 
 // Helper to compile the blacklist set from local text files
@@ -99,6 +91,7 @@ function generateSecurityChallenge(userId) {
 
     const percentageRoll = Math.random();
 
+    // TIPUL 1 (65% Șanse): Text amestecat, rotit, distorsionat cu linii de camuflaj
     if (percentageRoll < 0.65) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
@@ -149,6 +142,7 @@ function generateSecurityChallenge(userId) {
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
         return { type: 'IMAGE_DISTORTED', data: attachment };
     } 
+    // TIPUL 2 (30% Șanse): Stilul geometric curat (Dreptunghi verde / Cerc albastru) camuflat
     else if (percentageRoll < 0.95) {
         const canvas = createCanvas(500, 250);
         const ctx = canvas.getContext('2d');
@@ -190,6 +184,7 @@ function generateSecurityChallenge(userId) {
         const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'captcha.png' });
         return { type: 'IMAGE_GEOMETRIC', data: attachment };
     } 
+    // TIPUL 3 (5% Șanse): Doar text în bloc de cod (Fără imagine)
     else {
         const textDisplay = `\`\`\`\nCODE: ${code}\n\`\`\``;
         return { type: 'TEXT', data: textDisplay };
@@ -214,7 +209,6 @@ function createVerificationModal() {
 // 🌐 AUTOMATIC SLASH COMMAND SYNC
 client.once('ready', async () => {
     console.log(`🤖 Bot ${client.user.tag} is online and operational!`);
-
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
@@ -225,6 +219,7 @@ client.once('ready', async () => {
             { name: 'unlockdown', description: 'Disable lockdown mode. Allows new members to join normally.' }
         ];
 
+        const axios = require('axios');
         await axios.put(
             `https://discord.com/api/v10/applications/${appId}/commands`,
             commandData,
@@ -239,7 +234,7 @@ client.once('ready', async () => {
 // 🚀 INTERACTION HANDLER
 client.on('interactionCreate', async (interaction) => {
     
-    // Setup logic
+    // Setup Logic
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Access Denied: Administrator permission required.', ephemeral: true });
@@ -303,7 +298,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.editReply({ content: `✅ **Automated Security Setup Successful! All channels are now dynamically locked.**` });
     }
 
-    // Get Code logic
+    // Get Code Trigger
     if (interaction.isButton() && interaction.customId === 'click_to_verify') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -350,7 +345,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
-    // Scan local text files command
+    // Scan Database Command
     if (interaction.isChatInputCommand() && interaction.commandName === 'scan') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Permission Denied: Administrator access required.', ephemeral: true });
@@ -366,17 +361,17 @@ client.on('interactionCreate', async (interaction) => {
             if (member.user.bot) continue;
             if (blacklistedIds.has(member.id)) {
                 try {
-                    await member.ban({ reason: 'Identified in global security blacklist database (.txt)' });
+                    await member.ban({ reason: 'Identified in local database file compilation.' });
                     banCount++;
                 } catch (err) {}
             } else {
                 safeCount++;
             }
         }
-        return interaction.editReply({ content: `🛡️ **Security Scan Complete!**\nValid/Safe Accounts: **${safeCount}**\nPurged: **${banCount}**` });
+        return interaction.editReply({ content: `🛡️ **Security Scan Complete!**\nValid/Safe Accounts: **${safeCount}**\nPurged Threats: **${banCount}**` });
     }
 
-    // Lockdown commands
+    // Lockdown Commands
     if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'lockdown') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: '❌ No permission.', ephemeral: true });
@@ -391,7 +386,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     // ==========================================
-    // 7. POP-UP MODAL - STRICT DISCORD CONNECTIONS ONLY LOGIC
+    // 7. POP-UP MODAL - STRICT LOCAL DATABASE CHECK (INCLUDES BannedGroups.txt)
     // ==========================================
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
@@ -403,65 +398,25 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Verification session expired. Please click **Get Code** again.' });
         }
 
-        // Pasul 1: Verificare Cod Captcha
+        // Pasul A: Validare Cod Captcha
         if (enteredCode.toUpperCase() === correctCode.toUpperCase()) {
             userCaptchas.delete(userId); 
 
-            // Pasul 2: Verificare listă locală .txt (Discord IDs)
-            const txtBlacklist = getBlacklistSet();
-            if (txtBlacklist.has(userId)) {
+            // Pasul B: Verificare în listele de text (Membri + BannedGroups.txt integrat local)
+            const strictBlacklist = getBlacklistSet();
+            
+            if (strictBlacklist.has(userId)) {
                 try {
-                    await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** due to security blacklist flags.`).catch(() => null);
-                    await interaction.member.kick('Auto-Kicked: Flagged in local text files.');
-                    return interaction.editReply({ content: '❌ Verification failed: Your account is flagged.' });
-                } catch (err) {}
-            }
-
-            // Pasul 3: STRICŢ DISCORD PROFILE CONNECTIONS SCANNERS (NO EXTERNAL APIS)
-            let isBlacklistedInRoblox = false;
-
-            try {
-                // Interogăm profilul de utilizator direct prin Discord API pentru a-i citi secțiunea Connections
-                const userProfileRes = await axios.get(`https://discord.com/api/v10/users/${userId}/profile`, {
-                    headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` }
-                }).catch(() => null);
-
-                if (userProfileRes && userProfileRes.data && userProfileRes.data.connected_accounts) {
-                    // Căutăm conexiunea numită 'roblox'
-                    const robloxConnection = userProfileRes.data.connected_accounts.find(acc => acc.type === 'roblox');
-                    
-                    if (robloxConnection) {
-                        const robloxId = robloxConnection.id; // Extragem ID-ul lui real de Roblox din profil
-                        console.log(`[CONNECTIONS SCAN] Found linked Roblox ID ${robloxId} directly on profile of ${interaction.user.tag}`);
-
-                        // Apelăm API-ul oficial Roblox pentru a-i citi grupurile live
-                        const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`).catch(() => null);
-                        
-                        if (groupRes && groupRes.data && groupRes.data.data) {
-                            const userGroups = groupRes.data.data.map(g => Number(g.group.id));
-                            
-                            // Vedem dacă se potrivește cu cele 28 de grupuri cu red flag
-                            const hasBadGroup = BLACKLISTED_ROBLOX_GROUPS.some(id => userGroups.includes(Number(id)));
-                            if (hasBadGroup) {
-                                isBlacklistedInRoblox = true;
-                            }
-                        }
-                    }
+                    await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your account is flagged in our security database.`).catch(() => null);
+                    await interaction.member.kick('Auto-Kicked: ID matched a local security database entry.');
+                    console.log(`[SECURITY SCAN] Purged user ${interaction.user.tag} (Matched entry in local .txt files)`);
+                    return interaction.editReply({ content: '❌ Verification failed: Your account is flagged as unsafe.' });
+                } catch (kickErr) {
+                    return interaction.editReply({ content: '❌ Threat flagged, but bot failed to kick due to role hierarchy.' });
                 }
-            } catch (profileError) {
-                console.error('⚠️ Connections Profile Read Error:', profileError.message);
             }
 
-            // Dacă este prins în grupurile interzise din conexiunile lui -> KICK
-            if (isBlacklistedInRoblox) {
-                try {
-                    await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your linked Roblox profile belongs to a blacklisted group.`).catch(() => null);
-                    await interaction.member.kick('Auto-Kicked: Linked Roblox profile in banned groups list.');
-                    return interaction.editReply({ content: '❌ Verification failed: Your linked Roblox account is blacklisted.' });
-                } catch (err) {}
-            }
-
-            // Pasul 4: Utilizatorul este valid!
+            // Pasul C: Contul este sigur! Oferim rolurile și accesul complet
             const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
             const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
 
@@ -469,14 +424,15 @@ client.on('interactionCreate', async (interaction) => {
                 if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
                 if (verifiedRole) await interaction.member.roles.add(verifiedRole);
                 
+                // Trimiterea mesajului de întâmpinare pe canalul general
                 const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general' && c.type === ChannelType.GuildText);
                 if (generalChannel) {
                     await generalChannel.send(`🛡️ ${interaction.user} your account is safe. Welcome to the server!`).catch(() => null);
                 }
 
-                return interaction.editReply({ content: '✅ Verification successful! Welcome!' });
+                return interaction.editReply({ content: '✅ Verification successful! Welcome to the server!' });
             } catch (roleError) {
-                return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** Move bot role to top!' });
+                return interaction.editReply({ content: '❌ **Discord Hierarchy Error:** Drag the bot\'s role to the top of the list in Server Settings!' });
             }
         } else {
             return interaction.editReply({ content: '❌ Invalid code! Click **Get Code** again.' });
