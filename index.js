@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Ro-Scanner (Stable Roblox API Integration) Online!\n');
+   res.end('Ro-Scanner (Proxy Enabled Production Build) Online!\n');
 }).listen(port, () => {
    console.log(`[SERVER] Running on port ${port}.`);
 });
@@ -45,7 +45,7 @@ const client = new Client({
 const userCaptchas = new Map();
 let LOCKDOWN_MODE = false;
 
-// Extract purely numeric Group IDs from BannedGroups.txt safely 
+// Extract purely numeric Group IDs from BannedGroups.txt safely
 function getBannedRobloxGroups() {
     const bannedGroups = new Set();
     const filePath = path.join(__dirname, 'BannedGroups.txt');
@@ -54,7 +54,7 @@ function getBannedRobloxGroups() {
             const content = fs.readFileSync(filePath, 'utf-8');
             content.split(/\r?\n/).forEach(line => {
                 const trimmed = line.trim();
-                const idOnly = trimmed.replace(/\D/g, ''); // Removes source metadata cleanly 
+                const idOnly = trimmed.replace(/\D/g, ''); // Removes metadata cleanly
                 if (idOnly) bannedGroups.add(Number(idOnly));
             });
         } catch (err) {
@@ -136,7 +136,7 @@ function generateSecurityChallenge(userId) {
     return { data: attachment };
 }
 
-// Exact Modal matching Ro-scanner's core presentation layout
+// Verification Form Popup Layout
 function createVerificationModal() {
     const modal = new ModalBuilder()
         .setCustomId('modal_captcha_submit')
@@ -162,7 +162,7 @@ function createVerificationModal() {
     );
 }
 
-// 🌐 AUTOMATIC SLASH COMMAND GLOBAL SYNCHRONIZATION
+// 🌐 AUTOMATIC SLASH COMMAND SYNCHRONIZATION
 client.once('ready', async () => {
     console.log(`🤖 Bot account ${client.user.tag} initialized in production environment!`);
     try {
@@ -186,7 +186,7 @@ client.once('ready', async () => {
 // 🚀 CORE INTERACTION GATEWAY
 client.on('interactionCreate', async (interaction) => {
     
-    // 1. /SETUP ENGINE
+    // 1. /SETUP COMMAND
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Access Denied: Administrator security clearance required.', ephemeral: true });
@@ -222,7 +222,7 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Structural error: Failed to generate standard text validation channel.' });
         }
 
-        // Apply fallback overrides to clear remaining channel layouts
+        // Hide channels from unverified users
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
@@ -254,7 +254,6 @@ client.on('interactionCreate', async (interaction) => {
                 new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter Details').setStyle(ButtonStyle.Primary)
             );
 
-            // Responding with an interaction component message first keeps the API from locking up
             return await interaction.reply({
                 content: `🔒 **Ro-Scanner Challenge:** Examine the security block closely, then select the blue **"Enter Details"** button to type the answer along with your user tag:`,
                 files: [challenge.data],
@@ -267,12 +266,12 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 3. STAGE 2 FORM TRIGGER (Pops modal gracefully without interaction overlap)
+    // 3. STAGE 2 FORM TRIGGER
     if (interaction.isButton() && interaction.customId === 'trigger_modal_input') {
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
-    // 4. FINAL VALIDATION SCAN (Featuring stable Multi-Username API endpoint)
+    // 4. FINAL VALIDATION SUBMIT (With RoProxy Anti-Block Bypass)
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -287,10 +286,10 @@ client.on('interactionCreate', async (interaction) => {
 
         userCaptchas.delete(userId);
 
-        // STABLE UPGRADE: Precise Multi-Username Roblox Profiler API Lookup
+        // RO-PROXY UPGRADE: Bypasses Cloudflare hosting blocks via .roproxy.com mirror
         let robloxId = null;
         try {
-            const userRes = await axios.post('https://users.roblox.com/v1/users/by-usernames', {
+            const userRes = await axios.post('https://users.roproxy.com/v1/users/by-usernames', {
                 usernames: [robloxUsername],
                 excludeBannedUsers: false
             });
@@ -298,38 +297,38 @@ client.on('interactionCreate', async (interaction) => {
                 robloxId = userRes.data.data[0].id;
             }
         } catch (err) {
-            console.error('Roblox Username Resolution Fault:', err.message);
-            return interaction.editReply({ content: '❌ Communication failure with Roblox API. Try again in a minute.' });
+            console.error('Proxy Username Fetch Error:', err.message);
+            return interaction.editReply({ content: '❌ Communication failure with Roblox API proxy routing layer. Please try again.' });
         }
 
         if (!robloxId) {
             return interaction.editReply({ content: '❌ The specified Roblox profile could not be found. Check your spelling.' });
         }
 
-        // Live group mapping check via verified ID indices
+        // Live group scanning check utilizing roproxy network tunnels
         let isBlacklisted = false;
         try {
-            const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
+            const groupRes = await axios.get(`https://groups.roproxy.com/v1/users/${robloxId}/groups/roles`);
             if (groupRes.data && groupRes.data.data) {
                 const userGroups = groupRes.data.data.map(g => Number(g.group.id));
                 const bannedGroups = getBannedRobloxGroups();
                 isBlacklisted = userGroups.some(id => bannedGroups.has(id));
             }
         } catch (err) {
-            console.error('Roblox Group Mapping Fetch Fault:', err.message);
+            console.error('Proxy Group Fetch Error:', err.message);
         }
 
         if (isBlacklisted) {
             try {
-                await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your Roblox profile (\`${robloxUsername}\`) is found within a restricted community list.`).catch(() => null);
-                await interaction.member.kick('Auto-Kicked via Ro-Scanner: Restricted Roblox Group Connection Found.');
-                return interaction.editReply({ content: '❌ Access Denied: Associated Roblox credentials flagged in security blacklist databases!' });
+                await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your Roblox profile (\`${robloxUsername}\`) is associated with a blacklisted community group.`).catch(() => null);
+                await interaction.member.kick('Auto-Kicked via Ro-Scanner: Blacklisted Roblox Group Entry Identified.');
+                return interaction.editReply({ content: '❌ Access Denied: Bound Roblox profile found in blacklisted databases!' });
             } catch (err) {
-                return interaction.editReply({ content: '❌ Flagged asset isolated, but role priority prevented kick sequence.' });
+                return interaction.editReply({ content: '❌ Flagged asset isolated, but role priority rules prevented kick execution.' });
             }
         }
 
-        // Account clean, deploy target roles
+        // Pass validation successfully
         const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
         const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
 
@@ -341,13 +340,13 @@ client.on('interactionCreate', async (interaction) => {
             if (generalChannel) {
                 await generalChannel.send(`🛡️ ${interaction.user} cleared registration checks successfully! (Roblox: \`${robloxUsername}\`)`);
             }
-            return interaction.editReply({ content: '✅ Verification successful! Server paths have been unlocked.' });
+            return interaction.editReply({ content: 'Composite verification check passed cleanly. Welcome!' });
         } catch (err) {
-            return interaction.editReply({ content: '❌ Structural error applying verified identity states.' });
+            return interaction.editReply({ content: '❌ Structural configuration error when updating user role positions.' });
         }
     }
 
-    // 5. UTILITY MANAGEMENT PATHS (SCAN & LOCKDOWN SETS)
+    // 5. UTILITY ADMINISTRATIVE COMMANDS
     if (interaction.isChatInputCommand()) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return interaction.reply({ content: '❌ Error: Administrative permissions required.', ephemeral: true });
@@ -373,7 +372,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Structural Anti-Raid Gate
+// Structural Anti-Raid Gateway Join Rule
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return;
     if (LOCKDOWN_MODE) {
