@@ -271,7 +271,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(createVerificationModal()).catch(() => null);
     }
 
-    // 4. FINAL VALIDATION SUBMIT (With RoProxy Anti-Block Bypass)
+    // 4. FINAL VALIDATION SUBMIT
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -286,10 +286,10 @@ client.on('interactionCreate', async (interaction) => {
 
         userCaptchas.delete(userId);
 
-        // RO-PROXY UPGRADE: Bypasses Cloudflare hosting blocks via .roproxy.com mirror
+        // ✅ FIXED PATHWAY ENDPOINT HERE:
         let robloxId = null;
         try {
-            const userRes = await axios.post('https://users.roproxy.com/v1/users/by-usernames', {
+            const userRes = await axios.post('https://users.roproxy.com/v1/usernames/users', {
                 usernames: [robloxUsername],
                 excludeBannedUsers: false
             });
