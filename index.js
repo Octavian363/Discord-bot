@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Ro-Scanner (OAuth Secure Flow + Captcha Build) Online!\n');
+   res.end('Ro-Scanner (Safe Defer Flow Build) Online!\n');
 }).listen(port, () => {
    console.log(`[SERVER] Running on port ${port}.`);
 });
@@ -43,7 +43,6 @@ const client = new Client({
 });
 
 const userCaptchas = new Map();
-const pendingSessions = new Map(); // Stores { userId: { robloxUsername, robloxId } }
 let LOCKDOWN_MODE = false;
 
 const AUTHORIZED_ADMIN_ROLE_ID = '1521550962945163575';
@@ -139,7 +138,6 @@ function generateSecurityChallenge(userId) {
     return { data: attachment };
 }
 
-// Form popup for entering Roblox name and the Captcha image code
 function createFinalVerificationModal() {
     const modal = new ModalBuilder()
         .setCustomId('modal_captcha_submit')
@@ -165,9 +163,8 @@ function createFinalVerificationModal() {
     );
 }
 
-// 🌐 AUTOMATIC SLASH COMMAND SYNCHRONIZATION
 client.once('ready', async () => {
-    console.log(`🤖 Bot account ${client.user.tag} initialized with OAuth Link + Captcha flow!`);
+    console.log(`🤖 Bot account ${client.user.tag} initialized!`);
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
@@ -180,13 +177,12 @@ client.once('ready', async () => {
         await axios.put(`https://discord.com/api/v10/applications/${appId}/commands`, commandData, {
             headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' }
         });
-        console.log('✅ Global slash operations synced cleanly with Discord API instances.');
+        console.log('✅ Global slash operations synced.');
     } catch (error) {
         console.error('❌ Application command mapping error:', error.message);
     }
 });
 
-// 🚀 CORE INTERACTION GATEWAY
 client.on('interactionCreate', async (interaction) => {
     
     // 1. /SETUP COMMAND
@@ -221,10 +217,6 @@ client.on('interactionCreate', async (interaction) => {
             }).catch(() => null);
         }
 
-        if (!verifyChannel) {
-            return interaction.editReply({ content: '❌ Structural error: Failed to generate standard text validation channel.' });
-        }
-
         const channels = guild.channels.cache;
         for (const [id, channel] of channels) {
             if (channel.id === verifyChannel.id) continue;
@@ -239,7 +231,7 @@ client.on('interactionCreate', async (interaction) => {
             new ButtonBuilder()
                 .setLabel('🔗 Connect via Roblox.com')
                 .setStyle(ButtonStyle.Link)
-                .setURL('https://www.roblox.com/login'), // Schimbă cu link-ul tău dedicat dacă ai o pagină/joc OAuth
+                .setURL('https://www.roblox.com/login'),
             new ButtonBuilder()
                 .setCustomId('open_captcha_stage')
                 .setLabel('➡️ Get Captcha Image')
@@ -247,33 +239,37 @@ client.on('interactionCreate', async (interaction) => {
         );
 
         await verifyChannel.send({
-            content: `🔒 **Ro-Scanner Secure Gateway**\n\n` +
+            content: `**Ro-scanner Profile Integration**\n\n` +
                      `1️⃣ Apasă pe butonul albastru **"Connect via Roblox.com"** pentru a te conecta securizat cu contul tău de Roblox.\n` +
                      `2️⃣ După ce te-ai conectat, apasă pe butonul verde **"Get Captcha Image"** pentru a genera imaginile de securitate și a finaliza verificarea.`,
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Portalul de Verificare Roblox + Captcha a fost generat!**` });
+        return interaction.editReply({ content: `✅ **Portalul a fost generat cu succes!**` });
     }
 
-    // 2. STAGE 2: GENERATE THE VISUAL CAPTCHA IMAGE
+    // 2. STAGE 2: GENERATE CAPTCHA (FIXED WITH DEFER)
     if (interaction.isButton() && interaction.customId === 'open_captcha_stage') {
         try {
+            // Îi spunem Discord-ului să aștepte (Prevenim eroarea "Interaction Failed")
+            await interaction.deferReply({ ephemeral: true });
+
             const challenge = generateSecurityChallenge(interaction.user.id);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter Captcha Code').setStyle(ButtonStyle.Primary)
             );
 
-            return await interaction.reply({
+            // Folosim editReply în loc de reply simplu pentru că am dat deja defer!
+            return await interaction.editReply({
                 content: `🖼️ **Ro-Scanner Challenge:** Privește imaginea de securitate de mai jos, apoi apasă pe butonul albastru **"Enter Captcha Code"** pentru a introduce numele tău de Roblox și codul din imagine.`,
                 files: [challenge.data],
-                components: [row],
-                ephemeral: true
+                components: [row]
             });
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: '❌ Eroare la generarea imaginii Captcha. Încearcă din nou.', ephemeral: true });
+            // Dacă dă eroare, trimitem un mesaj de siguranță folosind un canal curat
+            return interaction.followUp({ content: '❌ Eroare la generarea imaginii Captcha. Încearcă din nou.', ephemeral: true }).catch(() => null);
         }
     }
 
@@ -326,7 +322,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ Acest profil de Roblox nu a putut fi găsit. Verifică dacă ai scris corect numele.' });
         }
 
-        // Live group scanning check utilizing roproxy network tunnels
         let isBlacklisted = false;
         try {
             const groupRes = await axios.get(`https://groups.roproxy.com/v1/users/${robloxId}/groups/roles`, {
@@ -345,13 +340,12 @@ client.on('interactionCreate', async (interaction) => {
             try {
                 await interaction.user.send(`❌ Ai primit kick din **${interaction.guild.name}** deoarece contul tău de Roblox (\`${robloxUsername}\`) face parte dintr-un grup interzis.`).catch(() => null);
                 await interaction.member.kick('Auto-Kicked via Ro-Scanner: Blacklisted Roblox Group Entry Identified.');
-                return interaction.editReply({ content: '❌ Acces Respins: Contul tău se află în baza de date cu grupuri interzise!' });
+                return interaction.editReply({ content: '❌ Access Respins: Contul tău se află în baza de date cu grupuri interzise!' });
             } catch (err) {
                 return interaction.editReply({ content: '❌ Jucătorul este marcat, dar permisiunile botului nu au permis executarea comenzii de kick.' });
             }
         }
 
-        // Apply server roles
         const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
         const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
 
@@ -359,7 +353,6 @@ client.on('interactionCreate', async (interaction) => {
             if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
             if (verifiedRole) await interaction.member.roles.add(verifiedRole);
             
-            // Auto change Discord nickname to Roblox username
             await interaction.member.setNickname(robloxUsername).catch(() => null);
 
             const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general');
