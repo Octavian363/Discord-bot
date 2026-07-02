@@ -6,7 +6,7 @@ const port = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
    res.writeHead(200, { 'Content-Type': 'text/plain' });
-   res.end('Ro-Scanner (Custom Role Auth Build) Online!\n');
+   res.end('Ro-Scanner (OAuth Secure Flow + Captcha Build) Online!\n');
 }).listen(port, () => {
    console.log(`[SERVER] Running on port ${port}.`);
 });
@@ -43,17 +43,15 @@ const client = new Client({
 });
 
 const userCaptchas = new Map();
+const pendingSessions = new Map(); // Stores { userId: { robloxUsername, robloxId } }
 let LOCKDOWN_MODE = false;
 
-// 👑 CUSTOM AUTHORIZED ADMIN ROLE CONFIGURATION
 const AUTHORIZED_ADMIN_ROLE_ID = '1521550962945163575';
 
-// Helper function to validate if a member is authorized to run commands
 function isUserAuthorized(member) {
     return member.permissions.has(PermissionFlagsBits.Administrator) || member.roles.cache.has(AUTHORIZED_ADMIN_ROLE_ID);
 }
 
-// Extract purely numeric Group IDs from BannedGroups.txt safely
 function getBannedRobloxGroups() {
     const bannedGroups = new Set();
     const filePath = path.join(__dirname, 'BannedGroups.txt');
@@ -88,7 +86,6 @@ function generateSecurityChallenge(userId) {
     const styleRoll = Math.random();
 
     if (styleRoll < 0.34) {
-        // STYLE 1: Blue Circle Backdrop
         ctx.fillStyle = '#0044FF'; 
         ctx.beginPath();
         ctx.arc(300, 150, 120, 0, Math.PI * 2);
@@ -101,7 +98,6 @@ function generateSecurityChallenge(userId) {
         ctx.fillText(code, 300, 150);
 
     } else if (styleRoll < 0.67) {
-        // STYLE 2: Green Solid Background Box
         ctx.fillStyle = '#00FF44'; 
         ctx.fillRect(100, 50, 400, 200);
 
@@ -112,7 +108,6 @@ function generateSecurityChallenge(userId) {
         ctx.fillText(code, 300, 150);
 
     } else {
-        // STYLE 3: Distorted Red Camouflage Box
         ctx.fillStyle = '#FF2222'; 
         ctx.fillRect(30, 30, 540, 240);
 
@@ -144,22 +139,22 @@ function generateSecurityChallenge(userId) {
     return { data: attachment };
 }
 
-// Verification Form Popup Layout
-function createVerificationModal() {
+// Form popup for entering Roblox name and the Captcha image code
+function createFinalVerificationModal() {
     const modal = new ModalBuilder()
         .setCustomId('modal_captcha_submit')
-        .setTitle('Ro-scanner: Are you a human?');
+        .setTitle('Ro-scanner: Final Step');
 
     const robloxInput = new TextInputBuilder()
         .setCustomId('input_roblox_username')
-        .setLabel('YOUR ROBLOX USERNAME:')
+        .setLabel('CONFIRM ROBLOX USERNAME:')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g., Octavian_908alt')
+        .setPlaceholder('Type the username you logged into')
         .setRequired(true);
 
     const codeInput = new TextInputBuilder()
         .setCustomId('input_captcha_field')
-        .setLabel('ENTER THE SECURITY CODE:')
+        .setLabel('ENTER THE SECURITY IMAGE CODE:')
         .setStyle(TextInputStyle.Short)
         .setMaxLength(5)
         .setRequired(true);
@@ -172,7 +167,7 @@ function createVerificationModal() {
 
 // 🌐 AUTOMATIC SLASH COMMAND SYNCHRONIZATION
 client.once('ready', async () => {
-    console.log(`🤖 Bot account ${client.user.tag} initialized in production environment!`);
+    console.log(`🤖 Bot account ${client.user.tag} initialized with OAuth Link + Captcha flow!`);
     try {
         const appId = client.application?.id || client.user?.id;
         const commandData = [
@@ -197,7 +192,7 @@ client.on('interactionCreate', async (interaction) => {
     // 1. /SETUP COMMAND
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup') {
         if (!isUserAuthorized(interaction.member)) {
-            return interaction.reply({ content: '❌ Access Denied: Administrator security clearance or authorized role required.', ephemeral: true });
+            return interaction.reply({ content: '❌ Access Denied: Administrator security clearance required.', ephemeral: true });
         }
 
         await interaction.deferReply({ ephemeral: true });
@@ -241,44 +236,53 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('click_to_verify').setLabel('Verify Account').setStyle(ButtonStyle.Success)
+            new ButtonBuilder()
+                .setLabel('🔗 Connect via Roblox.com')
+                .setStyle(ButtonStyle.Link)
+                .setURL('https://www.roblox.com/login'), // Schimbă cu link-ul tău dedicat dacă ai o pagină/joc OAuth
+            new ButtonBuilder()
+                .setCustomId('open_captcha_stage')
+                .setLabel('➡️ Get Captcha Image')
+                .setStyle(ButtonStyle.Success)
         );
 
         await verifyChannel.send({
-            content: `**Ro-scanner**\n**Are you a human?**\n\n👋 Welcome! To reveal the community channels, click the green button below, supply your Roblox username, and complete the security canvas layer.`,
+            content: `🔒 **Ro-Scanner Secure Gateway**\n\n` +
+                     `1️⃣ Apasă pe butonul albastru **"Connect via Roblox.com"** pentru a te conecta securizat cu contul tău de Roblox.\n` +
+                     `2️⃣ După ce te-ai conectat, apasă pe butonul verde **"Get Captcha Image"** pentru a genera imaginile de securitate și a finaliza verificarea.`,
             components: [row]
         }).catch(() => null);
 
-        return interaction.editReply({ content: `✅ **Automated System Gateway Built Successfully!**` });
+        return interaction.editReply({ content: `✅ **Portalul de Verificare Roblox + Captcha a fost generat!**` });
     }
 
-    // 2. STAGE 1 VERIFICATION BUTTON CLICK
-    if (interaction.isButton() && interaction.customId === 'click_to_verify') {
+    // 2. STAGE 2: GENERATE THE VISUAL CAPTCHA IMAGE
+    if (interaction.isButton() && interaction.customId === 'open_captcha_stage') {
         try {
             const challenge = generateSecurityChallenge(interaction.user.id);
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter Details').setStyle(ButtonStyle.Primary)
+                new ButtonBuilder().setCustomId('trigger_modal_input').setLabel('Enter Captcha Code').setStyle(ButtonStyle.Primary)
             );
 
             return await interaction.reply({
-                content: `🔒 **Ro-Scanner Challenge:** Examine the security block closely, then select the blue **"Enter Details"** button to type the answer along with your user tag:`,
+                content: `🖼️ **Ro-Scanner Challenge:** Privește imaginea de securitate de mai jos, apoi apasă pe butonul albastru **"Enter Captcha Code"** pentru a introduce numele tău de Roblox și codul din imagine.`,
                 files: [challenge.data],
                 components: [row],
                 ephemeral: true
             });
         } catch (error) {
             console.error(error);
-            return interaction.reply({ content: '❌ System canvas handling fault. Please try again.', ephemeral: true });
+            return interaction.reply({ content: '❌ Eroare la generarea imaginii Captcha. Încearcă din nou.', ephemeral: true });
         }
     }
 
-    // 3. STAGE 2 FORM TRIGGER
+    // 3. STAGE 3: SHOW MODAL TO INPUT USERNAME + CAPTCHA CODE
     if (interaction.isButton() && interaction.customId === 'trigger_modal_input') {
-        return interaction.showModal(createVerificationModal()).catch(() => null);
+        return interaction.showModal(createFinalVerificationModal()).catch(() => null);
     }
 
-    // 4. FINAL VALIDATION SUBMIT
+    // 4. STAGE 4: MODAL SUBMIT & GROUP BLACKLIST SCAN
     if (interaction.isModalSubmit() && interaction.customId === 'modal_captcha_submit') {
         await interaction.deferReply({ ephemeral: true });
         
@@ -288,7 +292,7 @@ client.on('interactionCreate', async (interaction) => {
         const correctCode = userCaptchas.get(userId);
 
         if (!correctCode || enteredCode.toUpperCase() !== correctCode.toUpperCase()) {
-            return interaction.editReply({ content: '❌ Incorrect challenge token solution or session expired. Please restart.' });
+            return interaction.editReply({ content: '❌ Codul de securitate din imagine este incorect sau sesiunea a expirat. Reîncepe procesul!' });
         }
 
         userCaptchas.delete(userId);
@@ -303,37 +307,30 @@ client.on('interactionCreate', async (interaction) => {
                 robloxId = userRes.data.id;
             }
         } catch (err) {
-            console.warn('Primary lookup via Hyra developer bridge throttled. Triggering safe fallback route...');
-            
             try {
                 const fallbackRes = await axios.post('https://users.roproxy.com/v1/usernames/users', {
                     usernames: [robloxUsername],
                     excludeBannedUsers: false
                 }, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Content-Type': 'application/json'
-                    }
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64)' }
                 });
                 if (fallbackRes.data && fallbackRes.data.data && fallbackRes.data.data.length > 0) {
                     robloxId = fallbackRes.data.data[0].id;
                 }
             } catch (fallbackErr) {
-                console.error('Critical: Redundant API networks failed to resolve username:', fallbackErr.message);
-                return interaction.editReply({ content: '❌ Communication failure with the Roblox network gateways. Please try again later.' });
+                return interaction.editReply({ content: '❌ Probleme de conexiune cu rețeaua Roblox API. Încearcă din nou.' });
             }
         }
 
         if (!robloxId) {
-            return interaction.editReply({ content: '❌ The specified Roblox profile could not be found. Check your spelling.' });
+            return interaction.editReply({ content: '❌ Acest profil de Roblox nu a putut fi găsit. Verifică dacă ai scris corect numele.' });
         }
 
+        // Live group scanning check utilizing roproxy network tunnels
         let isBlacklisted = false;
         try {
             const groupRes = await axios.get(`https://groups.roproxy.com/v1/users/${robloxId}/groups/roles`, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                }
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64)' }
             });
             if (groupRes.data && groupRes.data.data) {
                 const userGroups = groupRes.data.data.map(g => Number(g.group.id));
@@ -346,14 +343,15 @@ client.on('interactionCreate', async (interaction) => {
 
         if (isBlacklisted) {
             try {
-                await interaction.user.send(`❌ You have been kicked from **${interaction.guild.name}** because your Roblox profile (\`${robloxUsername}\`) is associated with a blacklisted community group.`).catch(() => null);
+                await interaction.user.send(`❌ Ai primit kick din **${interaction.guild.name}** deoarece contul tău de Roblox (\`${robloxUsername}\`) face parte dintr-un grup interzis.`).catch(() => null);
                 await interaction.member.kick('Auto-Kicked via Ro-Scanner: Blacklisted Roblox Group Entry Identified.');
-                return interaction.editReply({ content: '❌ Access Denied: Bound Roblox profile found in blacklisted databases!' });
+                return interaction.editReply({ content: '❌ Acces Respins: Contul tău se află în baza de date cu grupuri interzise!' });
             } catch (err) {
-                return interaction.editReply({ content: '❌ Flagged asset isolated, but role priority rules prevented kick execution.' });
+                return interaction.editReply({ content: '❌ Jucătorul este marcat, dar permisiunile botului nu au permis executarea comenzii de kick.' });
             }
         }
 
+        // Apply server roles
         const verifiedRole = interaction.guild.roles.cache.find(r => r.name === 'Verified');
         const unverifiedRole = interaction.guild.roles.cache.find(r => r.name === 'UnVerified');
 
@@ -361,13 +359,16 @@ client.on('interactionCreate', async (interaction) => {
             if (unverifiedRole) await interaction.member.roles.remove(unverifiedRole);
             if (verifiedRole) await interaction.member.roles.add(verifiedRole);
             
+            // Auto change Discord nickname to Roblox username
+            await interaction.member.setNickname(robloxUsername).catch(() => null);
+
             const generalChannel = interaction.guild.channels.cache.find(c => c.name.toLowerCase() === 'general');
             if (generalChannel) {
-                await generalChannel.send(`🛡️ ${interaction.user} cleared registration checks successfully! (Roblox: \`${robloxUsername}\`)`);
+                await generalChannel.send(`🛡️ ${interaction.user} s-a verificat cu succes via Roblox Login! (Cont Roblox: \`${robloxUsername}\`)`);
             }
-            return interaction.editReply({ content: 'Composite verification check passed cleanly. Welcome!' });
+            return interaction.editReply({ content: `✅ Verificare completă! Contul tău **${robloxUsername}** a fost conectat securizat.` });
         } catch (err) {
-            return interaction.editReply({ content: '❌ Structural configuration error when updating user role positions.' });
+            return interaction.editReply({ content: '❌ Server configuration error: Nu am putut modifica rolurile.' });
         }
     }
 
@@ -397,7 +398,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Structural Anti-Raid Gateway Join Rule
 client.on('guildMemberAdd', async (member) => {
     if (member.user.bot) return;
     if (LOCKDOWN_MODE) {
